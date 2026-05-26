@@ -13,6 +13,23 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   `YAMLException` from gray-matter when a SKILL/AGENT/HOOK/MCP description
   contains unquoted YAML flow syntax (`{...}`, `[...]`, unquoted colons).
 
+### Docs
+
+- README: added "Installing artifacts" section explaining the
+  `<source>/<leaf>` artifact layout and a general recipe for importing
+  Claude Code plugin repos (with `obra/superpowers` as a concrete example).
+- README: added "What's isolated, what leaks" section enumerating which
+  surfaces a bundle session sees versus hides.
+- README: added "Troubleshooting" entries for the three most common bundle
+  resolve errors (`missing source qualifier`, `source not found`,
+  `bundle not found`), including a migration snippet for legacy flat
+  `~/.config/umbel/skills/<leaf>/` layouts.
+- README Quickstart: replaced bare refs (`pandas-cheatsheet`, `plotnine`,
+  `data-scientist`, `duckdb`) with `local/`-qualified equivalents so the
+  example matches the resolver's `<source>/<leaf>` requirement, and added
+  a pointer to `docs/bundles-spec.md` for the full schema (hooks,
+  mergeMcp, …).
+
 ## [0.1.0] — 2026-05-26
 
 Initial public release.
