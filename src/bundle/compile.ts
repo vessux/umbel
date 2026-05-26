@@ -168,8 +168,15 @@ function readArtifactFrontmatter(
   } catch {
     throw new UsageError(`${kind} ${srcDir}: missing ${mdFile}`);
   }
-  const parsed = matter(raw);
-  return { fm: parsed.data as Record<string, unknown>, body: parsed.content };
+  try {
+    const parsed = matter(raw);
+    return { fm: parsed.data as Record<string, unknown>, body: parsed.content };
+  } catch (e) {
+    const first = e instanceof Error ? e.message.split("\n", 1)[0] : String(e);
+    throw new UsageError(
+      `${kind} ${srcDir}: invalid YAML in ${mdFile} frontmatter: ${first}\nHint: if a value contains \`{...}\`, \`[...]\`, or unquoted colons (e.g. code snippets in description), wrap it as a YAML block scalar:\n  description: >-\n    your text here`,
+    );
+  }
 }
 
 function pickCanonicalName(fm: Record<string, unknown>, fallback: string): string {

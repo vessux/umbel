@@ -4,6 +4,15 @@ All notable changes to this project will be documented here. Format roughly
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning
 follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- `compile` now wraps frontmatter parse errors as `UsageError` with the
+  artifact ref and a `description: >-` hint, instead of leaking raw
+  `YAMLException` from gray-matter when a SKILL/AGENT/HOOK/MCP description
+  contains unquoted YAML flow syntax (`{...}`, `[...]`, unquoted colons).
+
 ## [0.1.0] — 2026-05-26
 
 Initial public release.

@@ -5,6 +5,7 @@ import { gcBundles } from "../../../src/bundle/cache.ts";
 import { compile } from "../../../src/bundle/compile.ts";
 import type { ResolvedBundle } from "../../../src/bundle/compose.ts";
 import type { ResolvedSources } from "../../../src/bundle/resolve.ts";
+import { UsageError } from "../../../src/errors.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 function bundle(partial: Partial<ResolvedBundle>): ResolvedBundle {
@@ -84,6 +85,36 @@ describe("compile", () => {
     expect(readlinkSync(join(dir, "skills", "plannotator-annotate"))).toBe(dir1);
     // The source-side leaf does NOT appear in the cache.
     expect(existsSync(join(dir, "skills", "annotate"))).toBe(false);
+  });
+
+  it("rejects unquoted YAML flow-mapping in frontmatter with actionable UsageError", () => {
+    // Regression: invoi skills had descriptions like
+    //   description: Use when editing code that has both `icon: 'lucide:X'` and `to: { name: 'Y' }`...
+    // The `{ name: 'Y' }` is a YAML flow-mapping opener inside a plain scalar,
+    // which is invalid per YAML 1.2. We want a clear error pointing at the
+    // artifact and suggesting `description: >-`, not a raw parser exception.
+    const dir = join(srcRoot, "skills", "invoi", "icons");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "SKILL.md"),
+      "---\nname: icons\ndescription: Use when editing code that has both `icon: 'lucide:X'` and `to: { name: 'Y' }` in the same object — that combination is a whitelist surface.\n---\nbody\n",
+    );
+    const sources: ResolvedSources = {
+      ...emptySources(),
+      skills: new Map([["invoi/icons", dir]]),
+    };
+    let caught: unknown;
+    try {
+      compile(bundle({ skills: ["invoi/icons"] }), sources, { cacheRoot });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UsageError);
+    const msg = (caught as Error).message;
+    expect(msg).toMatch(/skill/);
+    expect(msg).toMatch(/SKILL\.md/);
+    expect(msg).toMatch(/invoi\/icons|icons/);
+    expect(msg).toMatch(/description: >-|block scalar/);
   });
 
   it("prefix-on-collision: same canonical name from two sources → both prefixed and copied", () => {
