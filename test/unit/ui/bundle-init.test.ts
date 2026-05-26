@@ -1,0 +1,110 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach } from "vitest";
+import { loadManifest } from "../../../src/bundle/manifest.ts";
+import { listAvailableArtifacts, renderInitManifest } from "../../../src/ui/bundle-init.ts";
+import { buildSourceTree, cleanup, makeTmpDir } from "../../helpers/tmp.ts";
+
+describe("renderInitManifest", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = makeTmpDir();
+  });
+  afterEach(() => {
+    cleanup(dir);
+  });
+
+  function writeAndLoad(name: string, content: string) {
+    const path = join(dir, `${name}.md`);
+    writeFileSync(path, content);
+    return loadManifest(path);
+  }
+
+  it("renders a minimal manifest with just a name + description", () => {
+    const out = renderInitManifest({
+      name: "demo",
+      description: "Demo bundle",
+      extends: [],
+      skills: [],
+      agents: [],
+    });
+    expect(out).toContain("name: demo");
+    expect(out).toContain("description: Demo bundle");
+  });
+
+  it("output round-trips through slice 1's parser without warnings", () => {
+    const out = renderInitManifest({
+      name: "demo",
+      description: "Demo",
+      extends: ["base"],
+      skills: ["tdd"],
+      agents: ["scout"],
+    });
+    const { manifest, warnings } = writeAndLoad("demo", out);
+    expect(warnings).toEqual([]);
+    expect(manifest.name).toBe("demo");
+    expect(manifest.extends).toEqual(["base"]);
+    expect(manifest.skills).toEqual(["tdd"]);
+    expect(manifest.agents).toEqual(["scout"]);
+  });
+
+  it("includes empty-placeholder comments pointing to spec for runtime fields", () => {
+    const out = renderInitManifest({
+      name: "x",
+      description: "",
+      extends: [],
+      skills: [],
+      agents: [],
+    });
+    expect(out).toMatch(/\bmcps\b/);
+    expect(out).toMatch(/hooks/);
+    expect(out).toMatch(/settings/);
+    expect(out).toMatch(/spec/i);
+  });
+
+  it("omits 'extends' from frontmatter when no parents selected", () => {
+    const out = renderInitManifest({
+      name: "x",
+      description: "",
+      extends: [],
+      skills: ["a"],
+      agents: [],
+    });
+    expect(out).not.toMatch(/^extends:/m);
+  });
+
+  it("omits empty list fields rather than rendering 'foo: []'", () => {
+    const out = renderInitManifest({
+      name: "x",
+      description: "",
+      extends: [],
+      skills: [],
+      agents: [],
+    });
+    expect(out).not.toMatch(/^skills:/m);
+    expect(out).not.toMatch(/^agents:/m);
+  });
+});
+
+describe("listAvailableArtifacts", () => {
+  let root: string;
+  beforeEach(() => {
+    root = makeTmpDir();
+  });
+  afterEach(() => {
+    cleanup(root);
+  });
+
+  it("returns qualified <source>/<leaf> names from a subfoldered skills root", () => {
+    buildSourceTree(root, [
+      { name: "tdd", source: "pocock" },
+      { name: "review", source: "local" },
+    ]);
+    expect(listAvailableArtifacts(root, "SKILL.md")).toEqual(["local/review", "pocock/tdd"]);
+  });
+
+  it("returns [] when the root does not exist", () => {
+    expect(listAvailableArtifacts(join(root, "missing"), "SKILL.md")).toEqual([]);
+  });
+});

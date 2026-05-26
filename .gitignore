@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.npm-cache/
+*.log
+.DS_Store
+.env
+.env.*
+.claude/
+.mcp.json
+
+# Private project memory — see CLAUDE.local.md
+CLAUDE.local.md
+docs/backlog.jsonl
+docs/worklog.jsonl

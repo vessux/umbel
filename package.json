@@ -1,0 +1,68 @@
+{
+  "name": "@vessux/umbel",
+  "version": "0.1.0",
+  "description": "Compose Claude Code sessions from named bundles of skills, subagents, hooks, MCP servers, and settings — switchable per `claude` process.",
+  "type": "module",
+  "bin": {
+    "umbel": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "os": [
+    "!win32"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "bundle",
+    "plugin",
+    "skills",
+    "agents",
+    "mcp",
+    "cli"
+  ],
+  "author": "Jakub Kovaľ <kuba.koval@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vessux/umbel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vessux/umbel/issues"
+  },
+  "homepage": "https://github.com/vessux/umbel#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.4.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.8.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
