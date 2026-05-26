@@ -18,4 +18,46 @@ jobs:
           cache: npm
       - run: npm install -g npm@latest
       - run: npm ci
-      - run: npm publish
+
+      # The npm CLI's --provenance flow (auto-enabled for trusted-publisher
+      # OIDC) occasionally hits TLOG_CREATE_ENTRY_ERROR (Rekor 409): a
+      # transient network glitch causes the CLI to re-submit an identical
+      # DSSE envelope, Sigstore de-dupes by envelope hash and rejects the
+      # retry. A fresh process regenerates the envelope with a new
+      # timestamp, so a workflow re-run recovers. This wrapper automates
+      # that. Pattern from ValescoAgency/runway#21.
+      - name: Publish to npm
+        run: |
+          set -o pipefail
+          MAX_ATTEMPTS=3
+          PKG_NAME=$(node -p "require('./package.json').name")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          LOG=$(mktemp)
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "::group::Publish attempt $attempt of $MAX_ATTEMPTS"
+            if npm publish 2>&1 | tee "$LOG"; then
+              echo "::endgroup::"
+              echo "Publish succeeded on attempt $attempt."
+              exit 0
+            fi
+            echo "::endgroup::"
+
+            if npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
+              echo "CLI errored but $PKG_NAME@$PKG_VERSION is on npm. Treating as success."
+              exit 0
+            fi
+
+            if grep -q "TLOG_CREATE_ENTRY_ERROR" "$LOG"; then
+              if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+                echo "Hit TLOG_CREATE_ENTRY_ERROR; sleeping 30s before retry."
+                sleep 30
+                continue
+              fi
+              echo "::error::TLOG_CREATE_ENTRY_ERROR persisted across $MAX_ATTEMPTS attempts."
+              exit 1
+            fi
+
+            echo "::error::Publish failed with a non-retryable error."
+            exit 1
+          done
