@@ -1,6 +1,6 @@
 {
   "name": "@vessux/umbel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Compose Claude Code sessions from named bundles of skills, subagents, hooks, MCP servers, and settings — switchable per `claude` process.",
   "type": "module",
   "bin": {
@@ -10,8 +10,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18.17"

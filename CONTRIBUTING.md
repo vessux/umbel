@@ -41,8 +41,8 @@ npm run lint      # check only
 
 - Keep changes focused. One concern per PR.
 - Add tests for new behavior.
-- Update `CHANGELOG.md` under `## Unreleased`.
-- Commit messages: short, imperative ("fix X", "add Y").
+- Commit messages: short, imperative ("fix X", "add Y"). Release notes are
+  generated from merged PR titles, so write the PR title like a changelog line.
 
 ## Reporting bugs
 

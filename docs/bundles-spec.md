@@ -568,7 +568,7 @@ For a single bundle, prints three sections:
 
 - **CC plugin schema evolution**. `plugin.json` shape and per-process flag
   names may change upstream. Compiler is version-pinned to a known CC schema;
-  CHANGELOG flags major bumps.
+  release notes flag major bumps.
 - **`--strict-mcp-config` blast radius**. By default the bundle replaces all
   project MCPs. `umbel show` surfaces the diff loudly; `mergeMcp: true` opts
   out per bundle.
