@@ -18,10 +18,9 @@ describe("computeClaudeArgs", () => {
     expect(args).toEqual(["--plugin-dir", cache, "--settings", `${cache}/settings.json`]);
   });
 
-  it("adds --settings when bundle declares hooks (no explicit settings)", () => {
+  it("does not add --settings for a hooks-only bundle (hooks load via the plugin dir)", () => {
     const args = computeClaudeArgs(bundle({ hooks: ["base/preflight"] }), cache);
-    expect(args).toContain("--settings");
-    expect(args).toContain(`${cache}/settings.json`);
+    expect(args).toEqual(["--plugin-dir", cache]);
   });
 
   it("adds --mcp-config + --strict-mcp-config when bundle has mcps (default mergeMcp)", () => {

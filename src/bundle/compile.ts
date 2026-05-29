@@ -59,7 +59,7 @@ export function compile(
     rmSync(finalDir, { recursive: true, force: true });
   }
   ensureDir(dirname(finalDir));
-  buildLayout(bundle, sources, hash, partial);
+  buildLayout(bundle, sources, hash, partial, finalDir);
   // Write bundle.md into `partial` but embed `finalDir` in the Invocation
   // block, so consumers reading the cache after the atomic rename see the
   // real path, not the `.partial` staging name.
@@ -78,6 +78,7 @@ function buildLayout(
   sources: ResolvedSources,
   hash: string,
   dir: string,
+  finalDir: string,
 ): void {
   ensureDir(dir);
 
@@ -94,15 +95,18 @@ function buildLayout(
   symlinkArtifacts(dir, "skills", "SKILL.md", sources.skills);
   symlinkArtifacts(dir, "agents", "AGENT.md", sources.agents);
 
-  const hookConfig = emitHooks(dir, sources.hooks);
+  emitHooks(dir, sources.hooks);
 
-  const mcpServers = emitMcps(dir, sources.mcps);
+  const mcpServers = emitMcps(dir, finalDir, sources.mcps);
   if (mcpServers && Object.keys(mcpServers).length > 0) {
     writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers }, null, 2));
   }
 
-  // settings.json: merge bundle.settings + aggregated hooks.
-  const settingsContent = buildSettings(bundle.settings, hookConfig);
+  // settings.json carries only the bundle `settings:` field. Hooks go into the
+  // plugin's hooks/hooks.json (see emitHooks): CC resolves ${CLAUDE_PLUGIN_ROOT}
+  // only for hooks that are plugin-associated, never for hooks loaded via
+  // --settings — so a hook with a rewritten command would hard-fail there.
+  const settingsContent = buildSettings(bundle.settings);
   if (settingsContent !== null) {
     writeFileSync(join(dir, "settings.json"), JSON.stringify(settingsContent, null, 2));
   }
@@ -184,20 +188,24 @@ function pickCanonicalName(fm: Record<string, unknown>, fallback: string): strin
 }
 
 /**
- * Rewrite an artifact command string: leading `./<rel>` becomes
- * `${CLAUDE_PLUGIN_ROOT}/<kind>/<finalName>/<rel>`. Other forms pass through —
- * leaves `docker`, `npx`, absolute paths, etc. untouched.
+ * Anchor an artifact command's leading `./<rel>` to a known base dir. Other
+ * forms pass through — `docker`, `npx`, absolute paths, etc. stay untouched.
+ *
+ * Hooks anchor on `${CLAUDE_PLUGIN_ROOT}`, which resolves because hooks load
+ * from the plugin's `hooks/hooks.json`. MCPs anchor on the absolute cache path:
+ * their `.mcp.json` is consumed via `--mcp-config`, where `${CLAUDE_PLUGIN_ROOT}`
+ * is NOT substituted (CC only resolves it for plugin-associated configs).
  */
-function rewritePluginRootCommand(command: string, kind: string, finalName: string): string {
+function rewriteRelativeCommand(command: string, base: string): string {
   const trimmed = command.trimStart();
   if (trimmed.startsWith("./")) {
-    return `\${CLAUDE_PLUGIN_ROOT}/${kind}/${finalName}/${trimmed.slice(2)}`;
+    return `${base}/${trimmed.slice(2)}`;
   }
   return command;
 }
 
-function emitHooks(cacheDir: string, map: Map<string, string>): HookConfig | undefined {
-  if (map.size === 0) return undefined;
+function emitHooks(cacheDir: string, map: Map<string, string>): void {
+  if (map.size === 0) return;
   const hooksDir = join(cacheDir, "hooks");
   ensureDir(hooksDir);
 
@@ -228,7 +236,7 @@ function emitHooks(cacheDir: string, map: Map<string, string>): HookConfig | und
 
     const cmdEntry: HookCommand = {
       type: "command",
-      command: rewritePluginRootCommand(command, "hooks", finalName),
+      command: rewriteRelativeCommand(command, `\${CLAUDE_PLUGIN_ROOT}/hooks/${finalName}`),
       ...passThrough,
     };
     const spec: HookSpec = { matcher, hooks: [cmdEntry] };
@@ -236,15 +244,19 @@ function emitHooks(cacheDir: string, map: Map<string, string>): HookConfig | und
     specs.push(spec);
     out[event] = specs;
   }
-  return out;
+  // Plugin hooks schema wraps the event map under a top-level `hooks` key. This
+  // file is loaded automatically because the cache dir is the --plugin-dir
+  // plugin, which is what makes ${CLAUDE_PLUGIN_ROOT} resolve in the commands.
+  writeFileSync(join(hooksDir, "hooks.json"), JSON.stringify({ hooks: out }, null, 2));
 }
 
 function emitMcps(
-  cacheDir: string,
+  writeDir: string,
+  finalDir: string,
   map: Map<string, string>,
 ): Record<string, McpServerConfig> | undefined {
   if (map.size === 0) return undefined;
-  const mcpsDir = join(cacheDir, "mcps");
+  const mcpsDir = join(writeDir, "mcps");
   ensureDir(mcpsDir);
 
   const entries = readNamedArtifacts(map, "MCP.md", "mcp");
@@ -263,8 +275,11 @@ function emitMcps(
       delete passThrough[k];
     }
 
+    // Files are written into `writeDir` (the `.partial` staging dir) but the
+    // command must anchor on `finalDir` — the path the artifact lives at after
+    // the atomic rename. (writeBundleMd applies the same partial→final split.)
     out[finalName] = {
-      command: rewritePluginRootCommand(command, "mcps", finalName),
+      command: rewriteRelativeCommand(command, join(finalDir, "mcps", finalName)),
       ...passThrough,
     };
   }
@@ -293,19 +308,9 @@ function copyWithRenamedFrontmatter(
   writeFileSync(join(destDir, mdFile), matter.stringify(entry.body, rewritten));
 }
 
-function buildSettings(
-  settings: BundleSettings | undefined,
-  hooks: HookConfig | undefined,
-): Record<string, unknown> | null {
-  const out: Record<string, unknown> = {};
-  if (settings) {
-    Object.assign(out, settings);
-  }
-  if (hooks && Object.keys(hooks).length > 0) {
-    out.hooks = hooks;
-  }
-  if (Object.keys(out).length === 0) return null;
-  return out;
+function buildSettings(settings: BundleSettings | undefined): Record<string, unknown> | null {
+  if (!settings || Object.keys(settings).length === 0) return null;
+  return { ...settings };
 }
 
 /**

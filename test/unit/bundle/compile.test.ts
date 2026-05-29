@@ -194,7 +194,9 @@ describe("compile", () => {
     };
     const dir = compile(bundle({ mcps: ["local/duckdb"] }), sources, { cacheRoot });
     const mcp = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
-    expect(mcp.mcpServers.duckdb.command).toBe("${CLAUDE_PLUGIN_ROOT}/mcps/duckdb/run.sh");
+    // Absolute cache path, NOT ${CLAUDE_PLUGIN_ROOT}: .mcp.json loads via
+    // --mcp-config, where CC does not substitute the plugin-root variable.
+    expect(mcp.mcpServers.duckdb.command).toBe(join(dir, "mcps", "duckdb", "run.sh"));
     expect(mcp.mcpServers.duckdb.args).toEqual(["--db", "x"]);
     expect(mcp.mcpServers.duckdb.env).toEqual({ DUCKDB_PATH: "/tmp/x" });
     expect(existsSync(join(dir, "mcps", "duckdb", "run.sh"))).toBe(true);
@@ -255,7 +257,7 @@ describe("compile", () => {
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
   });
 
-  it("writes settings.json combining settings + named hooks", () => {
+  it("writes settings.json for settings: and hooks/hooks.json for named hooks", () => {
     // Create a hook artifact and resolve it into sources for the compile.
     const hookDir = join(srcRoot, "hooks", "base", "preflight");
     mkdirSync(hookDir, { recursive: true });
@@ -279,14 +281,36 @@ describe("compile", () => {
     const s = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
     expect(s.model).toBe("claude-opus-4-7");
     expect(s.env).toEqual({ FOO: "bar" });
-    expect(s.hooks.PreToolUse).toHaveLength(1);
-    expect(s.hooks.PreToolUse[0].matcher).toBe("Bash");
+    // Hooks do NOT live in settings.json — CC won't resolve ${CLAUDE_PLUGIN_ROOT}
+    // there. They land in the plugin's hooks/hooks.json (top-level `hooks` key).
+    expect(s.hooks).toBeUndefined();
+    const h = JSON.parse(readFileSync(join(dir, "hooks", "hooks.json"), "utf8"));
+    expect(h.hooks.PreToolUse).toHaveLength(1);
+    expect(h.hooks.PreToolUse[0].matcher).toBe("Bash");
     // Relative command rewritten to ${CLAUDE_PLUGIN_ROOT}-anchored path.
-    expect(s.hooks.PreToolUse[0].hooks[0].command).toBe(
+    expect(h.hooks.PreToolUse[0].hooks[0].command).toBe(
       "${CLAUDE_PLUGIN_ROOT}/hooks/preflight/x.sh",
     );
     // Sidecar script copied into cache.
     expect(existsSync(join(dir, "hooks", "preflight", "x.sh"))).toBe(true);
+  });
+
+  it("emits hooks/hooks.json but no settings.json for a hooks-only bundle", () => {
+    const hookDir = join(srcRoot, "hooks", "base", "only");
+    mkdirSync(hookDir, { recursive: true });
+    writeFileSync(
+      join(hookDir, "HOOK.md"),
+      "---\nname: only\nevent: SessionStart\nmatcher: startup\ncommand: ./s.sh\n---\n",
+    );
+    writeFileSync(join(hookDir, "s.sh"), "#!/bin/sh\n");
+    const sources: ResolvedSources = {
+      ...emptySources(),
+      hooks: new Map([["base/only", hookDir]]),
+    };
+    const dir = compile(bundle({ hooks: ["base/only"] }), sources, { cacheRoot });
+    expect(() => readFileSync(join(dir, "settings.json"))).toThrow();
+    const h = JSON.parse(readFileSync(join(dir, "hooks", "hooks.json"), "utf8"));
+    expect(h.hooks.SessionStart[0].hooks[0].command).toBe("${CLAUDE_PLUGIN_ROOT}/hooks/only/s.sh");
   });
 
   it("does not write settings.json when no settings/hooks", () => {
@@ -359,7 +383,7 @@ describe("compile", () => {
       expect(md).toMatch(/--plugin-dir [^\n]+doc-demo-[0-9a-f]{12}/);
     });
 
-    it("invocation block includes --settings when bundle has named hooks", () => {
+    it("invocation block omits --settings for a hooks-only bundle (hooks load via the plugin dir)", () => {
       const hookDir = join(srcRoot, "hooks", "base", "h");
       mkdirSync(hookDir, { recursive: true });
       writeFileSync(
@@ -372,8 +396,9 @@ describe("compile", () => {
       };
       const dir = compile(bundle({ hooks: ["base/h"] }), sources, { cacheRoot });
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
-      expect(md).toContain("--settings");
-      expect(md).toContain("settings.json");
+      expect(md).not.toContain("--settings");
+      // Hook is compiled into the plugin's hooks/hooks.json instead.
+      expect(existsSync(join(dir, "hooks", "hooks.json"))).toBe(true);
     });
 
     it("invocation block includes --mcp-config + --strict-mcp-config (default mergeMcp)", () => {

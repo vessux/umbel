@@ -258,7 +258,9 @@ Rules for the `## Invocation` block:
 - One flag per line, backslash-continued, so consumers can grep flag-by-flag.
 - Absolute paths to the actual cache dir (host paths). Sandbox consumers
   search-and-replace the cache path with their in-container target.
-- `--settings` line present only when `settings.json` was emitted.
+- `--settings` line present only when `settings.json` was emitted (i.e. the
+  bundle declares a `settings:` field; hooks do **not** emit `settings.json` —
+  they load from the plugin's `hooks/hooks.json` via `--plugin-dir`).
 - `--mcp-config` line present only when `.mcp.json` was emitted.
 - `--strict-mcp-config` line present only when previous AND `mergeMcp` is
   not `true`.
@@ -481,7 +483,11 @@ error.
 
 `hooks` is **not** declared under `settings`; it is its own top-level field
 (see [Bundle definition](#bundle-definition)). The compiler emits hooks into
-the generated `settings.json` for the session.
+the plugin's `hooks/hooks.json` (auto-loaded via `--plugin-dir`), **not** into
+`settings.json`. Claude Code resolves `${CLAUDE_PLUGIN_ROOT}` only for hooks
+that are plugin-associated; a hook loaded from a `--settings` file is rejected
+at launch with *"Hook command references ${CLAUDE_PLUGIN_ROOT} but the hook is
+not associated with a plugin."*
 
 ## Hooks
 
@@ -519,8 +525,12 @@ For each hook reference resolved into a bundle, the compiler:
 2. Rewrites the `command` field: leading `./<rel>` becomes
    `${CLAUDE_PLUGIN_ROOT}/hooks/<canonical>/<rel>`. Other forms pass through
    verbatim.
-3. Aggregates `{event, matcher, command, ...extras}` into the generated
-   `settings.json` under `hooks: {<Event>: [{matcher, hooks: [{type:"command", command, ...extras}]}]}`.
+3. Aggregates `{event, matcher, command, ...extras}` into the plugin's
+   `<cache>/hooks/hooks.json` as
+   `{hooks: {<Event>: [{matcher, hooks: [{type:"command", command, ...extras}]}]}}`
+   (top-level `hooks` wrapper, per CC's plugin-hooks schema). The cache dir is
+   the `--plugin-dir` plugin, so this file loads automatically and
+   `${CLAUDE_PLUGIN_ROOT}` resolves to `<cache>`.
 
 Canonical-name collision across sources (same `name:` in two hook artifacts in
 one bundle) follows the same prefix-all rule as skills/agents: both become
@@ -564,17 +574,21 @@ For each mcp reference resolved into a bundle, the compiler:
 1. Copies the entire artifact directory (sidecars + `MCP.md`) into
    `<cache>/mcps/<canonical>/`. Canonical name = frontmatter `name:` (or
    leaf when absent).
-2. Rewrites the `command` field: leading `./<rel>` becomes
-   `${CLAUDE_PLUGIN_ROOT}/mcps/<canonical>/<rel>`. Other forms pass through
-   verbatim — useful for `command: docker`, `command: npx`, etc.
+2. Rewrites the `command` field: leading `./<rel>` becomes the **absolute**
+   `<cache>/mcps/<canonical>/<rel>`. Other forms pass through verbatim — useful
+   for `command: docker`, `command: npx`, etc. (Unlike hooks, MCP commands are
+   *not* anchored on `${CLAUDE_PLUGIN_ROOT}`: the `.mcp.json` is consumed via
+   `--mcp-config`, where CC does not substitute that variable — it resolves only
+   for plugin-associated configs. The absolute path is regenerated per build, so
+   it always points at the current cache dir.)
 3. Aggregates `{command, args, env, ...extras}` into the generated
    `.mcp.json` under `mcpServers: {<canonical>: {command, args, env, ...}}`.
 
 Canonical-name collision across sources (same `name:` in two MCP artifacts in
 one bundle) follows the same prefix-all rule as skills/agents/hooks: both
 become `<source>-<canonical>`. MCP artifacts are always **copied** (not
-symlinked) so the cache `<cache>/mcps/<X>/` directory is a stable plugin root
-for `${CLAUDE_PLUGIN_ROOT}` substitution.
+symlinked) so the cache `<cache>/mcps/<X>/` directory is a stable absolute path
+for the rewritten `command` to point at.
 
 `mergeMcp: true` retains its semantics — the compiler still emits the bundle
 `.mcp.json`, but `--strict-mcp-config` is omitted from the launch argv so the

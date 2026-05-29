@@ -13,6 +13,8 @@ export function computeClaudeArgs(bundle: ResolvedBundle, cacheDir: string): str
   if (hasSettings(bundle)) {
     args.push("--settings", join(cacheDir, "settings.json"));
   }
+  // Hooks are NOT a --settings concern: the compiler emits them into the
+  // plugin's hooks/hooks.json, auto-loaded via --plugin-dir above.
 
   if (hasMcp(bundle)) {
     args.push("--mcp-config", join(cacheDir, ".mcp.json"));
@@ -25,9 +27,7 @@ export function computeClaudeArgs(bundle: ResolvedBundle, cacheDir: string): str
 }
 
 function hasSettings(bundle: ResolvedBundle): boolean {
-  if (bundle.settings && Object.keys(bundle.settings).length > 0) return true;
-  if (bundle.hooks && Object.keys(bundle.hooks).length > 0) return true;
-  return false;
+  return Boolean(bundle.settings && Object.keys(bundle.settings).length > 0);
 }
 
 function hasMcp(bundle: ResolvedBundle): boolean {
