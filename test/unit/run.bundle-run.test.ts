@@ -97,6 +97,20 @@ describe("run() bundle run", () => {
     expect(stderr.join("")).toMatch(/not found on PATH/);
   });
 
+  it("prints a 'building bundle' notice to stderr on a cache miss", async () => {
+    bundleFile("demo");
+    await run(["run", "demo"], envWith({ PATH: "/" }), cwd);
+    expect(stderr.join("")).toMatch(/building bundle 'demo'…/);
+  });
+
+  it("does not re-print the build notice on a cache hit (second run)", async () => {
+    bundleFile("demo");
+    await run(["run", "demo"], envWith({ PATH: "/" }), cwd);
+    stderr.length = 0;
+    await run(["run", "demo"], envWith({ PATH: "/" }), cwd);
+    expect(stderr.join("")).not.toMatch(/building bundle/);
+  });
+
   itIfClaude("smoke: spawning claude --help via wrapper exits 0 with bundle flags", async () => {
     bundleFile("demo");
     const code = await run(

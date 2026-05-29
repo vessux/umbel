@@ -94,6 +94,8 @@ export interface PrepareOpts {
   cwd: string;
   /** Reuse a pre-discovered bundle index to avoid scanning the bundle dirs twice. */
   preloadedIndex?: BundleIndex;
+  /** Forwarded to compile(); fires only on a cache miss (an actual build). */
+  onBuild?: () => void;
 }
 
 export interface PreparedInvocation {
@@ -107,7 +109,10 @@ export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
   const { name, claudeArgs, env, cwd } = opts;
   const index = opts.preloadedIndex ?? loadBundleIndex(env, cwd);
   const { resolved, sources } = resolveBundle(name, index, env);
-  const cacheDir = compile(resolved, sources, { cacheRoot: bundleCacheRoot(env) });
+  const cacheDir = compile(resolved, sources, {
+    cacheRoot: bundleCacheRoot(env),
+    ...(opts.onBuild ? { onBuild: opts.onBuild } : {}),
+  });
   const spawnEnv: NodeJS.ProcessEnv = {
     ...env,
     UMBEL_BUNDLE: name,

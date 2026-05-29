@@ -36,6 +36,12 @@ export interface CompileOpts {
   cacheRoot: string;
   forceRebuild?: boolean;
   keepCache?: number;
+  /**
+   * Fired once, only on a cache miss — i.e. just before an actual build runs.
+   * Cache hits never call it. Lets callers surface a "building…" notice for the
+   * one path that has a perceptible slowdown.
+   */
+  onBuild?: () => void;
 }
 
 export function compile(
@@ -53,6 +59,8 @@ export function compile(
     updateByNameSymlink(opts.cacheRoot, bundle.name, finalDir);
     return finalDir;
   }
+
+  opts.onBuild?.();
 
   rmSync(partial, { recursive: true, force: true });
   if (opts.forceRebuild) {

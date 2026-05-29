@@ -326,6 +326,25 @@ describe("compile", () => {
     expect(statSync(b).mtimeMs).toBe(aMtime);
   });
 
+  it("onBuild fires on a cache miss but not on a subsequent cache hit", () => {
+    let calls = 0;
+    const onBuild = () => {
+      calls++;
+    };
+    compile(bundle({ name: "notify" }), emptySources(), { cacheRoot, onBuild });
+    expect(calls).toBe(1);
+    // Second compile of identical input is a cache hit — no rebuild, no notice.
+    compile(bundle({ name: "notify" }), emptySources(), { cacheRoot, onBuild });
+    expect(calls).toBe(1);
+    // forceRebuild counts as a build → fires again.
+    compile(bundle({ name: "notify" }), emptySources(), {
+      cacheRoot,
+      forceRebuild: true,
+      onBuild,
+    });
+    expect(calls).toBe(2);
+  });
+
   it("forceRebuild: replaces existing cache dir", () => {
     const a = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
     // Mark with custom file to detect replacement

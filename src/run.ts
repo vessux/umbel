@@ -291,6 +291,9 @@ async function runBundleRun(rest: string[], env: NodeJS.ProcessEnv, cwd: string)
     env,
     cwd,
     ...(pickedIndex ? { preloadedIndex: pickedIndex } : {}),
+    // run launches claude right after building, so a cache-miss build would
+    // otherwise look like a freeze before claude's first output appears.
+    onBuild: () => process.stderr.write(`building bundle '${resolvedName}'…\n`),
   });
   const result = spawnSync(prepared.command, prepared.args, {
     env: prepared.env as NodeJS.ProcessEnv,
