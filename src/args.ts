@@ -12,11 +12,14 @@ Bundle verbs:
   umbel list                          Print scope-grouped bundle table.
   umbel show [name]                   Resolved manifest + sources + MCP diff.
   umbel build [name] [--no-cache]     Compile cache dir (forced when --no-cache). Print path.
-  umbel apply [name]                  Pin <project>/.umbel-bundle.
+  umbel apply [name] [--vanilla]      Pin <project>/.umbel-bundle (use --vanilla for no bundle).
   umbel unpin                         Remove the project's pin file.
-  umbel run [name] [-- ...]           Launch claude with bundle flags.
+  umbel run [name] [-- ...]           Launch claude with bundle flags, or vanilla if no pin/picker chose so.
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
+  umbel shim install [--force]        Install the PATH shim (~/.config/umbel/bin/claude).
+  umbel shim uninstall                Remove the shim.
+  umbel shim path                     Print the shim's absolute path.
 
 Skills picker (v0, low-level):
   --target <path>     Exact parent dir for skill symlinks (non-interactive)
@@ -30,7 +33,8 @@ Skills picker (v0, low-level):
 Env:
   UMBEL_ARTIFACTS_DIR  Override the artifact root (default: \$XDG_CONFIG_HOME/umbel).
   UMBEL_CACHE_DIR      Override compiled-bundle cache root (default: \$XDG_CACHE_HOME/umbel).
-  UMBEL_BUNDLE         Used by 'run' name resolution (arg > env > pin).
+  UMBEL_BUNDLE         Used by 'run' name resolution (arg > env > pin). Set to "__vanilla__" to force vanilla.
+  UMBEL_RESOLVED       Set automatically when 'umbel run' spawns claude; the shim short-circuits to vanilla if set.
   NO_COLOR             Disable ANSI color (icons retained).
 
 Examples:
@@ -51,6 +55,7 @@ export const BUNDLE_VERBS = new Set([
   "init",
   "build",
   "gc",
+  "shim",
 ]);
 
 export type Subcommand =

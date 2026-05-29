@@ -329,22 +329,35 @@ umbel run [<name>] [--no-cache] [-- ...claude args]
 Resolution order for `<name>`:
 
 1. Explicit positional arg.
-2. `UMBEL_BUNDLE` env var.
-3. Pin file `<project>/.umbel-bundle` (plain text, single line, the name).
-4. No source → exit non-zero with hint listing nearest pickers.
+2. `UMBEL_BUNDLE` env var (literal `__vanilla__` resolves to vanilla; see below).
+3. Pin file `<project>/.umbel-bundle`. Three states:
+   - Bundle name → run that bundle.
+   - `__vanilla__` sentinel → run plain claude, no flags, no picker.
+   - Absent / empty → unresolved (continue to step 4).
+4. No source: on TTY, open the run picker with a `(vanilla)` row prepended
+   to the bundle list. On non-TTY, silently fall through to vanilla.
 
 `--no-cache` forces a rebuild even if the hash matches.
 
-After resolution, the wrapper:
+After resolution:
 
-1. Resolves manifest (project shadows user) + applies `extends:`.
-2. Validates. Errors abort.
-3. Computes hash. If `<name>-<hash>/` exists and lacks `.partial`, reuse.
-4. Else compile.
-5. `execve` claude with the four flags above plus the user's forwarded args.
-   Wrapper does not stay resident — exec replaces it.
+- **Named bundle**: wrapper resolves manifest (project shadows user),
+  applies `extends:`, validates, computes hash, reuses or builds the
+  cache dir, then spawns claude with the four flags above plus the
+  user's forwarded args.
+- **Vanilla**: wrapper spawns claude with no flags and no
+  `UMBEL_BUNDLE` in the inherited env. Used when the pin / env / picker
+  selected vanilla, or when no name resolved in a non-interactive shell.
 
-The wrapper is the only path that runs claude. There is no
+In both cases, the wrapper exports `UMBEL_RESOLVED=1` into the spawned
+claude's environment. This is a recursion guard: when claude (or any
+subprocess of it) re-invokes `claude` via the PATH shim, the shim sees
+`UMBEL_RESOLVED=1` and exec's the real claude binary directly, skipping
+the picker. The wrapper also strips its shim directory from `$PATH`
+before spawning so the spawned `claude` resolves to the real binary
+without a wasted bash hop.
+
+The wrapper is the only umbel path that runs claude. There is no
 `umbel apply --activate` / global-pin-and-relaunch mode.
 
 ## Pin file
@@ -353,8 +366,18 @@ The wrapper is the only path that runs claude. There is no
 <project>/.umbel-bundle
 ```
 
-Plain text, one line, the bundle name. Created by `umbel apply
-[<name>]`. Removed by `umbel unpin`.
+Plain text, one line. Three meaningful states:
+
+| Content       | Meaning                                                       |
+|---------------|---------------------------------------------------------------|
+| `<bundle>`    | Run under this bundle.                                        |
+| `__vanilla__` | Run plain claude with no bundle, no picker.                   |
+| (absent/empty)| No pin → picker on TTY, silent vanilla on non-TTY.            |
+
+`umbel apply <name>` writes a bundle pin. `umbel apply --vanilla`
+writes the `__vanilla__` sentinel. `umbel unpin` removes the file
+entirely. The bundle-name regex (`^[a-z][a-z0-9-]{1,40}$`) rejects
+underscores so the sentinel cannot collide with a real bundle.
 
 VCS treatment: not auto-managed. README documents the recommendation —
 **commit it** if the team wants a shared default; ignore it for per-developer
@@ -362,21 +385,58 @@ setups. umbel makes no edits to `.gitignore` and does not stage the file.
 
 ## Pickers
 
-Pickers fire when a no-arg subcommand is invoked on a TTY. Non-TTY → error
-with hint to either pass `<name>` or run `umbel apply` to set a pin.
+Pickers fire when a no-arg subcommand is invoked on a TTY. Behavior on
+non-TTY varies by verb:
+
+- `run` falls through to vanilla (silent, no prompt).
+- `apply` / `show` / `build` error with a hint to pass `<name>` or pin.
 
 ### `run` / `apply` / `unpin` / `show` / `build`
 
-Single-select picker. Row format:
+Single-select picker. For `run` and `apply`, a `(vanilla)` row is
+prepended to the bundle list. Row format:
 
 ```
+  (vanilla)         Run claude with no bundle
   data-science      Tools for data science work     [user] [pinned]
   base              Universal baseline              [user]
   ds-no-mcp         DS without DuckDB MCP           [project] [extends: data-science]
 ```
 
-Pinned bundle (if any) is pre-selected. `unpin` shows only the pinned bundle (if
+Pinned bundle (or vanilla pin) is pre-selected. The picker is purely
+ephemeral — selecting a bundle from `run` does **not** write a pin. To
+persist a default, run `umbel apply` (which uses the same picker but
+writes the pin on selection). `unpin` shows only the current pin (if
 any) for confirmation; absent pin → no-op.
+
+## PATH shim
+
+`umbel shim install [--force]` writes a bash script to
+`${UMBEL_ARTIFACTS_DIR:-$XDG_CONFIG_HOME/umbel}/bin/claude`. The user
+adds this directory to their shell rc:
+
+```
+export PATH="$HOME/.config/umbel/bin:$PATH"
+```
+
+The shim's behavior:
+
+1. If `UMBEL_RESOLVED=1` is set in the environment, the shim strips its
+   own dir from `$PATH` and exec's the real `claude` binary with the
+   forwarded args. This is the recursion-guard path used when umbel has
+   already resolved the launch (named bundle or vanilla) and is
+   spawning claude downstream, or when a subprocess inside claude
+   shells out to `claude` again.
+2. Otherwise, the shim exec's `umbel run -- "$@"`, which runs the
+   resolution flow above (arg → env → pin → picker / silent vanilla).
+
+`umbel shim uninstall` removes the file. `umbel shim path` prints the
+absolute path. The shim is self-contained bash; the install command
+just stamps it out.
+
+Opt-out for a single invocation: call claude by absolute path
+(`/usr/local/bin/claude ...`), or run with `UMBEL_RESOLVED=1` prefixed
+to the command.
 
 ### `init` wizard
 
@@ -524,13 +584,14 @@ project's own `.mcp.json` is additive rather than hidden.
 
 ```
 umbel run    [<name>] [--no-cache] [-- ...args]   # exec claude
-umbel apply  [<name>]                             # write pin
+umbel apply  [<name>] [--vanilla]                 # write pin (--vanilla = pin "no bundle")
 umbel unpin                                       # remove pin
 umbel list                                        # table
 umbel show   [<name>]                             # resolved view
 umbel init                                        # wizard
 umbel build  [<name>] [--no-cache]                # warm cache
 umbel gc                                          # prune cache
+umbel shim   install [--force] | uninstall | path # PATH-shim for `claude`
 umbel skills [options]                            # low-level skill picker (v0)
 umbel                                             # help
 ```

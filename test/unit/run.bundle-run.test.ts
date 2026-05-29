@@ -52,10 +52,35 @@ describe("run() bundle run", () => {
     writeFileSync(join(agentsDir, "bundles", `${name}.md`), `---\nname: ${name}\n---\n`);
   }
 
-  it("exits 2 with hint when no name resolvable in non-TTY mode", async () => {
-    const code = await run(["run"], envWith({ NO_TTY: "1" }), cwd);
-    expect(code).toBe(2);
-    expect(stderr.join("")).toMatch(/non-TTY|name required/);
+  it("non-TTY + no name resolvable → silent vanilla (no hint, exec claude)", async () => {
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(1);
+    expect(stderr.join("")).toMatch(/'claude' not found on PATH/);
+    expect(stderr.join("")).not.toMatch(/name required|non-TTY/);
+  });
+
+  it("vanilla pin → execs claude with no flags", async () => {
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    writeFileSync(join(cwd, ".umbel-bundle"), "__vanilla__\n");
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(1);
+    expect(stderr.join("")).toMatch(/'claude' not found on PATH/);
+  });
+
+  it("UMBEL_BUNDLE=__vanilla__ → execs claude with no flags", async () => {
+    const code = await run(
+      ["run"],
+      envWith({ NO_TTY: "1", PATH: "/", UMBEL_BUNDLE: "__vanilla__" }),
+      cwd,
+    );
+    expect(code).toBe(1);
+    expect(stderr.join("")).toMatch(/'claude' not found on PATH/);
+  });
+
+  it("UMBEL_RESOLVED=1 + no name → exec vanilla immediately", async () => {
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/", UMBEL_RESOLVED: "1" }), cwd);
+    expect(code).toBe(1);
+    expect(stderr.join("")).toMatch(/'claude' not found on PATH/);
   });
 
   it("exits 3 when bundle name not found", async () => {

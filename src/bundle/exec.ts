@@ -5,12 +5,24 @@ import { computeClaudeArgs } from "./claude-args.ts";
 import { compile } from "./compile.ts";
 import { type ResolvedBundle, compose } from "./compose.ts";
 import { discoverBundles } from "./discover.ts";
-import { artifactRoots, bundleCacheRoot, projectBundlesDir, userBundlesDir } from "./env.ts";
+import {
+  artifactRoots,
+  bundleCacheRoot,
+  projectBundlesDir,
+  shimDir,
+  stripFromPath,
+  userBundlesDir,
+} from "./env.ts";
 import type { BundleManifest } from "./manifest.ts";
 import { readPin } from "./pin.ts";
 import { type ResolvedSources, resolveSources } from "./resolve.ts";
 
-export type ResolveResult = { name: string; via: "arg" | "env" | "pin" } | { error: string };
+const VANILLA_ENV_SENTINEL = "__vanilla__";
+
+export type ResolveResult =
+  | { kind: "named"; name: string; via: "arg" | "env" | "pin" }
+  | { kind: "vanilla"; via: "env" | "pin" }
+  | { kind: "unresolved"; message: string };
 
 export function resolveBundleName(
   rest: string[],
@@ -19,13 +31,20 @@ export function resolveBundleName(
   home: string,
 ): ResolveResult {
   const arg = rest.find((a) => !a.startsWith("--"));
-  if (arg !== undefined && arg.length > 0) return { name: arg, via: "arg" };
+  if (arg !== undefined && arg.length > 0) return { kind: "named", name: arg, via: "arg" };
   const envName = env.UMBEL_BUNDLE;
-  if (envName && envName.length > 0) return { name: envName, via: "env" };
+  if (envName && envName.length > 0) {
+    if (envName === VANILLA_ENV_SENTINEL) return { kind: "vanilla", via: "env" };
+    return { kind: "named", name: envName, via: "env" };
+  }
   const pin = readPin(cwd, home);
-  if (pin) return { name: pin.name, via: "pin" };
+  if (pin) {
+    if (pin.kind === "vanilla") return { kind: "vanilla", via: "pin" };
+    return { kind: "named", name: pin.name, via: "pin" };
+  }
   return {
-    error: "no bundle specified (pass <name>, set UMBEL_BUNDLE, or 'umbel apply' to pin)",
+    kind: "unresolved",
+    message: "no bundle specified (pass <name>, set UMBEL_BUNDLE, or 'umbel apply' to pin)",
   };
 }
 
@@ -89,10 +108,17 @@ export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
   const index = opts.preloadedIndex ?? loadBundleIndex(env, cwd);
   const { resolved, sources } = resolveBundle(name, index, env);
   const cacheDir = compile(resolved, sources, { cacheRoot: bundleCacheRoot(env) });
+  const spawnEnv: NodeJS.ProcessEnv = {
+    ...env,
+    UMBEL_BUNDLE: name,
+    UMBEL_RESOLVED: "1",
+  };
+  const filteredPath = stripFromPath(env.PATH, shimDir(env));
+  if (filteredPath !== undefined) spawnEnv.PATH = filteredPath;
   return {
     command: "claude",
     args: [...computeClaudeArgs(resolved, cacheDir), ...claudeArgs],
-    env: { ...env, UMBEL_BUNDLE: name },
+    env: spawnEnv,
     cacheDir,
   };
 }

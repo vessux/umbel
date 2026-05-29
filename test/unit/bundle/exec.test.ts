@@ -130,6 +130,7 @@ describe("resolveBundleName", () => {
   it("explicit arg wins over env and pin", () => {
     writePin(cwd, home, "fromPin");
     expect(resolveBundleName(["wanted"], { UMBEL_BUNDLE: "fromEnv" }, cwd, home)).toEqual({
+      kind: "named",
       name: "wanted",
       via: "arg",
     });
@@ -138,6 +139,7 @@ describe("resolveBundleName", () => {
   it("env beats pin when no arg", () => {
     writePin(cwd, home, "fromPin");
     expect(resolveBundleName([], { UMBEL_BUNDLE: "fromEnv" }, cwd, home)).toEqual({
+      kind: "named",
       name: "fromEnv",
       via: "env",
     });
@@ -146,20 +148,37 @@ describe("resolveBundleName", () => {
   it("pin used when no arg or env", () => {
     writePin(cwd, home, "fromPin");
     expect(resolveBundleName([], {}, cwd, home)).toEqual({
+      kind: "named",
       name: "fromPin",
       via: "pin",
     });
   });
 
-  it("returns error when none present", () => {
+  it("returns unresolved when none present", () => {
     expect(resolveBundleName([], {}, cwd, home)).toMatchObject({
-      error: expect.stringMatching(/no bundle/i),
+      kind: "unresolved",
+      message: expect.stringMatching(/no bundle/i),
     });
   });
 
   it("ignores empty UMBEL_BUNDLE", () => {
     writePin(cwd, home, "fromPin");
     const r = resolveBundleName([], { UMBEL_BUNDLE: "" }, cwd, home);
-    expect("name" in r ? r.name : null).toBe("fromPin");
+    expect(r.kind === "named" ? r.name : null).toBe("fromPin");
+  });
+
+  it("UMBEL_BUNDLE=__vanilla__ resolves vanilla via env", () => {
+    expect(resolveBundleName([], { UMBEL_BUNDLE: "__vanilla__" }, cwd, home)).toEqual({
+      kind: "vanilla",
+      via: "env",
+    });
+  });
+
+  it("vanilla pin resolves to vanilla via pin", () => {
+    writeFileSync(join(cwd, ".umbel-bundle"), "__vanilla__\n");
+    expect(resolveBundleName([], {}, cwd, home)).toEqual({
+      kind: "vanilla",
+      via: "pin",
+    });
   });
 });

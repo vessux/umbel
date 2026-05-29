@@ -2,21 +2,35 @@ import { select } from "@clack/prompts";
 import type { BundleEntry } from "../bundle/discover.ts";
 import { PICKER_MAX_VISIBLE, assertSelected } from "./prompt.ts";
 
+export const VANILLA_PICK = "__vanilla__";
+
 export interface PickBundleOpts {
   entries: BundleEntry[];
   pinnedName?: string;
   message?: string;
+  /** Prepend a `(vanilla)` row meaning "run plain claude, no bundle". */
+  includeVanilla?: boolean;
+  /** Pre-select the vanilla row instead of any named pin. */
+  pinnedVanilla?: boolean;
 }
 
 export async function pickBundle(opts: PickBundleOpts): Promise<string | null> {
   const valid = opts.entries.filter((e) => !e.malformed);
-  if (valid.length === 0) return null;
+  if (valid.length === 0 && !opts.includeVanilla) return null;
 
-  const options = valid.map((e) => ({
-    label: formatBundleLabel(e, opts.pinnedName === e.name),
-    value: e.name,
-  }));
-  const initialValue = valid.find((e) => e.name === opts.pinnedName)?.name ?? options[0]!.value;
+  const options: { label: string; value: string }[] = [];
+  if (opts.includeVanilla) {
+    const tag = opts.pinnedVanilla ? "  [pinned]" : "";
+    options.push({ label: `(vanilla)  Run claude with no bundle${tag}`, value: VANILLA_PICK });
+  }
+  for (const e of valid) {
+    options.push({ label: formatBundleLabel(e, opts.pinnedName === e.name), value: e.name });
+  }
+
+  const initialValue = opts.pinnedVanilla
+    ? VANILLA_PICK
+    : (valid.find((e) => e.name === opts.pinnedName)?.name ?? options[0]!.value);
+
   return assertSelected(
     await select<string>({
       message: opts.message ?? "Select bundle:",

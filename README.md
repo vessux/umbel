@@ -173,29 +173,61 @@ the project-vs-bundle MCP diff.
 umbel list                              # scope-grouped bundle table
 umbel show [name]                       # resolved manifest + sources + MCP diff
 umbel build [name] [--no-cache]         # warm cache, print path
-umbel apply [name]                      # pin <project>/.umbel-bundle
+umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle (--vanilla = pin "no bundle")
 umbel unpin                             # remove the pin
-umbel run [name] [-- ...claude args]    # launch claude with bundle flags
+umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
+umbel shim install [--force]            # install ~/.config/umbel/bin/claude (the PATH shim)
+umbel shim uninstall                    # remove the shim
+umbel shim path                         # print the shim's absolute path
 umbel skills [options]                  # low-level skill installer (v0 picker)
 ```
 
 When invoked without `[name]` on a TTY, `run` / `apply` / `show` / `build`
-open a single-select picker. Pinned bundle is pre-selected.
+open a single-select picker. For `run` and `apply` the picker prepends a
+`(vanilla)` row meaning "no bundle, plain claude." Pinned bundle (or
+vanilla pin) is pre-selected.
+
+## PATH shim (recommended)
+
+Install the shim once so plain `claude` resolves through umbel and
+discovers the project's bundle automatically. The shim short-circuits to
+the real `claude` binary when umbel has already resolved the launch (so
+subprocess shellouts to `claude` don't re-prompt):
+
+```bash
+umbel shim install                       # writes ~/.config/umbel/bin/claude
+# then add to ~/.zshrc or ~/.bashrc:
+export PATH="$HOME/.config/umbel/bin:$PATH"
+```
+
+After that, plain `claude` in a project with a `.umbel-bundle` pin runs
+under that bundle. In a project without a pin, the shim shows the picker
+so you can choose a bundle for that session or pick `(vanilla)` to run
+plain claude. Non-interactive shells fall back to vanilla automatically.
+
+To opt out of all umbel routing for one invocation, call claude by its
+absolute path, or temporarily `unset PATH`'s shim entry.
 
 ## Pin file
 
-`<project>/.umbel-bundle` is plain text, one line, the bundle name.
-`umbel apply` writes it; `umbel unpin` removes it. Commit it to share a
+`<project>/.umbel-bundle` is plain text, one line:
+
+- a bundle name → run under that bundle;
+- `__vanilla__` → run plain claude with no bundle, no picker;
+- absent → picker on TTY, vanilla on non-TTY.
+
+`umbel apply <name>` writes a bundle pin. `umbel apply --vanilla` writes
+the vanilla pin. `umbel unpin` removes the file. Commit it to share a
 default with your team, or `.gitignore` it for per-developer setup.
 
 ## Bundle resolution order for `run`
 
 1. Explicit `<name>` arg
-2. `UMBEL_BUNDLE` env var
-3. `<project>/.umbel-bundle` pin file
-4. Picker on TTY, otherwise error.
+2. `UMBEL_BUNDLE` env var (set to `__vanilla__` to force vanilla)
+3. `<project>/.umbel-bundle` pin file (name or `__vanilla__`)
+4. On TTY → picker with `(vanilla)` row; on non-TTY → silent vanilla.
 
 ## Skills picker (low-level, v0)
 
@@ -248,7 +280,8 @@ Rows start checked iff currently installed correctly.
 |-----------------------|-------------------------------------------------------------------------|
 | `UMBEL_ARTIFACTS_DIR` | Override artifact root (default: `$XDG_CONFIG_HOME/umbel`).             |
 | `UMBEL_CACHE_DIR`     | Override compiled-bundle cache root (default: `$XDG_CACHE_HOME/umbel`). |
-| `UMBEL_BUNDLE`        | Used by `run` resolution (arg > env > pin).                             |
+| `UMBEL_BUNDLE`        | Used by `run` resolution (arg > env > pin). `__vanilla__` forces vanilla. |
+| `UMBEL_RESOLVED`      | Set by `umbel run` when spawning claude. The shim short-circuits to vanilla when present, so subprocess shellouts to `claude` don't re-prompt. |
 | `NO_COLOR`            | Disable ANSI color (icons retained).                                    |
 
 ## Exit codes

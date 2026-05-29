@@ -7,7 +7,15 @@ import { applyPlan } from "./applier/apply.ts";
 import { BUNDLE_VERBS, helpText, parseArgs, parseSubcommand } from "./args.ts";
 import { gcBundles, listBundleNames } from "./bundle/cache.ts";
 import { compile } from "./bundle/compile.ts";
-import { artifactRoots, bundleCacheRoot, projectBundlesDir, userBundlesDir } from "./bundle/env.ts";
+import {
+  artifactRoots,
+  bundleCacheRoot,
+  projectBundlesDir,
+  shimDir,
+  shimPath,
+  stripFromPath,
+  userBundlesDir,
+} from "./bundle/env.ts";
 import {
   type BundleIndex,
   loadBundleIndex,
@@ -16,19 +24,20 @@ import {
   resolveBundleName,
 } from "./bundle/exec.ts";
 import { renderList } from "./bundle/list.ts";
-import { readPin, removePin, writePin } from "./bundle/pin.ts";
+import { readPin, removePin, writePin, writeVanillaPin } from "./bundle/pin.ts";
 import { renderShow } from "./bundle/show.ts";
 import { detectCapabilities } from "./config.ts";
 import { CliError, UsageError } from "./errors.ts";
 import { renderPlanDiff } from "./planner/diff.ts";
 import { buildPlan } from "./planner/plan.ts";
+import { installShim, uninstallShim } from "./shim/install.ts";
 import { disambiguateSkills } from "./source/disambiguate.ts";
 import { scanSource } from "./source/scan.ts";
 import { probeAll } from "./state/probe.ts";
 import { resolveInteractiveTargets, targetFromOverride } from "./target/resolve.ts";
 import type { Capabilities, Options, Target } from "./types.ts";
 import { runInitWizard } from "./ui/bundle-init.ts";
-import { pickBundle } from "./ui/bundle-picker.ts";
+import { VANILLA_PICK, pickBundle } from "./ui/bundle-picker.ts";
 import { askCustomPath, confirmApply } from "./ui/confirm.ts";
 import { pickSkills } from "./ui/picker.ts";
 import { promptTarget } from "./ui/target-prompt.ts";
@@ -95,7 +104,48 @@ async function runBundleVerb(
   if (verb === "unpin") return runBundleUnpin(cwd);
   if (verb === "run") return runBundleRun(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
+  if (verb === "shim") return runShim(rest, env);
   return runBundleInit(env, cwd);
+}
+
+function runShim(rest: string[], env: NodeJS.ProcessEnv): number {
+  const action = rest[0];
+  const path = shimPath(env);
+  if (action === "path") {
+    if (rest.length > 1) {
+      process.stderr.write("umbel shim path: takes no arguments\n");
+      return 2;
+    }
+    process.stdout.write(`${path}\n`);
+    return 0;
+  }
+  if (action === "uninstall") {
+    if (rest.length > 1) {
+      process.stderr.write("umbel shim uninstall: takes no arguments\n");
+      return 2;
+    }
+    const result = uninstallShim(path);
+    process.stdout.write(
+      result.removed ? `removed ${result.path}\n` : `no shim at ${result.path}\n`,
+    );
+    return 0;
+  }
+  if (action === "install") {
+    const force = rest.slice(1).includes("--force");
+    const extra = rest.slice(1).filter((a) => a !== "--force");
+    if (extra.length > 0) {
+      process.stderr.write(`umbel shim install: unexpected argument: ${extra[0]}\n`);
+      return 2;
+    }
+    const result = installShim(path, { force });
+    const verb = result.overwritten ? "overwrote" : "installed";
+    process.stdout.write(`${verb} ${result.path}\n`);
+    process.stdout.write("\nAdd this line to your shell rc (~/.zshrc or ~/.bashrc):\n");
+    process.stdout.write(`  export PATH="${dirname(result.path)}:$PATH"\n`);
+    return 0;
+  }
+  process.stderr.write("umbel shim: expected 'install', 'uninstall', or 'path'\n");
+  return 2;
 }
 
 function runBundleGc(rest: string[], env: NodeJS.ProcessEnv): number {
@@ -155,26 +205,86 @@ async function pickBundleOrError(
     entries: index.entries,
     message: `Select bundle (${verb}):`,
   };
-  if (pin) pickOpts.pinnedName = pin.name;
+  if (pin && pin.kind === "bundle") pickOpts.pinnedName = pin.name;
   const picked = await pickBundle(pickOpts);
   return picked ?? 2;
+}
+
+type PickRunApply =
+  | { kind: "bundle"; name: string }
+  | { kind: "vanilla" }
+  | { kind: "exit"; code: number };
+
+/**
+ * Interactive-only picker that prepends a `(vanilla)` row. Caller must have
+ * already handled the non-interactive case.
+ */
+async function pickBundleOrVanilla(
+  index: BundleIndex,
+  cwd: string,
+  verb: "run" | "apply",
+): Promise<PickRunApply> {
+  const pin = readPin(cwd, homedir());
+  const pickOpts: Parameters<typeof pickBundle>[0] = {
+    entries: index.entries,
+    message: `Select bundle (${verb}):`,
+    includeVanilla: true,
+  };
+  if (pin?.kind === "bundle") pickOpts.pinnedName = pin.name;
+  if (pin?.kind === "vanilla") pickOpts.pinnedVanilla = true;
+  const picked = await pickBundle(pickOpts);
+  if (picked === null) return { kind: "exit", code: 2 };
+  if (picked === VANILLA_PICK) return { kind: "vanilla" };
+  return { kind: "bundle", name: picked };
+}
+
+function execVanilla(claudeArgs: string[], env: NodeJS.ProcessEnv): number {
+  const { UMBEL_BUNDLE: _drop, ...rest } = env;
+  void _drop;
+  const spawnEnv: NodeJS.ProcessEnv = { ...rest, UMBEL_RESOLVED: "1" };
+  const filteredPath = stripFromPath(env.PATH, shimDir(env));
+  if (filteredPath !== undefined) spawnEnv.PATH = filteredPath;
+  const result = spawnSync("claude", claudeArgs, {
+    env: spawnEnv,
+    stdio: "inherit",
+  });
+  if (result.error && (result.error as NodeJS.ErrnoException).code === "ENOENT") {
+    process.stderr.write("umbel run: 'claude' not found on PATH\n");
+    return 1;
+  }
+  return result.status ?? 1;
 }
 
 async function runBundleRun(rest: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
   const idx = rest.indexOf("--");
   const ownArgs = idx === -1 ? rest : rest.slice(0, idx);
   const claudeArgs = idx === -1 ? [] : rest.slice(idx + 1);
+
+  if (env.UMBEL_RESOLVED === "1" && ownArgs.length === 0 && !env.UMBEL_BUNDLE) {
+    return execVanilla(claudeArgs, env);
+  }
+
+  const resolved = resolveBundleName(ownArgs, env, cwd, homedir());
+
+  if (resolved.kind === "vanilla") {
+    return execVanilla(claudeArgs, env);
+  }
+
   let resolvedName: string;
   let pickedIndex: BundleIndex | undefined;
-  const resolved = resolveBundleName(ownArgs, env, cwd, homedir());
-  if ("error" in resolved) {
+  if (resolved.kind === "unresolved") {
+    if (!isInteractive(env)) {
+      return execVanilla(claudeArgs, env);
+    }
     pickedIndex = loadBundleIndex(env, cwd);
-    const picked = await pickBundleOrError(pickedIndex, env, cwd, "run");
-    if (typeof picked === "number") return picked;
-    resolvedName = picked;
+    const picked = await pickBundleOrVanilla(pickedIndex, cwd, "run");
+    if (picked.kind === "exit") return picked.code;
+    if (picked.kind === "vanilla") return execVanilla(claudeArgs, env);
+    resolvedName = picked.name;
   } else {
     resolvedName = resolved.name;
   }
+
   const prepared = prepareBundleInvocation({
     name: resolvedName,
     claudeArgs,
@@ -198,13 +308,36 @@ async function runBundleApply(
   env: NodeJS.ProcessEnv,
   cwd: string,
 ): Promise<number> {
-  const index = loadBundleIndex(env, cwd);
-  let name = rest[0];
-  if (name === undefined) {
-    const picked = await pickBundleOrError(index, env, cwd, "apply");
-    if (typeof picked === "number") return picked;
-    name = picked;
+  const wantsVanilla = rest.includes("--vanilla");
+  const positional = rest.filter((a) => !a.startsWith("--"));
+
+  if (wantsVanilla) {
+    if (positional.length > 0) {
+      process.stderr.write("umbel apply: --vanilla cannot be combined with a bundle name\n");
+      return 2;
+    }
+    const path = writeVanillaPin(cwd, homedir());
+    process.stdout.write(`pinned vanilla (no bundle) at ${path}\n`);
+    return 0;
   }
+
+  const index = loadBundleIndex(env, cwd);
+  let name = positional[0];
+  if (name === undefined) {
+    if (!isInteractive(env)) {
+      process.stderr.write("umbel apply: bundle name required (non-TTY)\n");
+      return 2;
+    }
+    const picked = await pickBundleOrVanilla(index, cwd, "apply");
+    if (picked.kind === "exit") return picked.code;
+    if (picked.kind === "vanilla") {
+      const path = writeVanillaPin(cwd, homedir());
+      process.stdout.write(`pinned vanilla (no bundle) at ${path}\n`);
+      return 0;
+    }
+    name = picked.name;
+  }
+
   const built = buildBundle(name, index, env);
   const path = writePin(cwd, homedir(), name);
   process.stdout.write(`pinned bundle '${name}' at ${path}\n`);

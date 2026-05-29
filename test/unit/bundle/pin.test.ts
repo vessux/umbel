@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { findProjectRoot, readPin, removePin, writePin } from "../../../src/bundle/pin.ts";
+import {
+  findProjectRoot,
+  readPin,
+  removePin,
+  writePin,
+  writeVanillaPin,
+} from "../../../src/bundle/pin.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 describe("pin file", () => {
@@ -27,6 +33,7 @@ describe("pin file", () => {
   it("reads back the pinned name", () => {
     writePin(project, home, "x");
     expect(readPin(project, home)).toEqual({
+      kind: "bundle",
       name: "x",
       path: join(project, ".umbel-bundle"),
     });
@@ -36,11 +43,27 @@ describe("pin file", () => {
     expect(readPin(project, home)).toBeNull();
   });
 
+  it("returns null when pin file is empty", () => {
+    writePin(project, home, "");
+    expect(readPin(project, home)).toBeNull();
+  });
+
   it("walks up from a subdirectory to the project root for read", () => {
     writePin(project, home, "x");
     const sub = join(project, "src", "deep");
     mkdirSync(sub, { recursive: true });
-    expect(readPin(sub, home)?.name).toBe("x");
+    const r = readPin(sub, home);
+    expect(r?.kind === "bundle" ? r.name : null).toBe("x");
+  });
+
+  it("writeVanillaPin writes the sentinel and readPin returns vanilla", () => {
+    const path = writeVanillaPin(project, home);
+    expect(path).toBe(join(project, ".umbel-bundle"));
+    expect(readFileSync(path, "utf8")).toBe("__vanilla__\n");
+    expect(readPin(project, home)).toEqual({
+      kind: "vanilla",
+      path,
+    });
   });
 
   it("removePin removes the file and returns true", () => {

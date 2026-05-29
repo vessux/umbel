@@ -12,12 +12,30 @@ export function projectBundlesDir(cwd: string, home: string): string {
   return findClaudeBundlesDir(cwd, home) ?? join(cwd, ".claude", "bundles");
 }
 
-function umbelArtifactsRoot(env: NodeJS.ProcessEnv): string {
+export function umbelArtifactsRoot(env: NodeJS.ProcessEnv): string {
   const root = env.UMBEL_ARTIFACTS_DIR;
   if (root && root.length > 0) return pathResolve(root);
   const xdg = env.XDG_CONFIG_HOME;
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".config");
   return join(base, "umbel");
+}
+
+export function shimDir(env: NodeJS.ProcessEnv): string {
+  return join(umbelArtifactsRoot(env), "bin");
+}
+
+export function shimPath(env: NodeJS.ProcessEnv): string {
+  return join(shimDir(env), "claude");
+}
+
+/**
+ * Remove `dir` from a colon-separated PATH string. Returns the filtered PATH.
+ * No-op if PATH is undefined or the dir isn't present.
+ */
+export function stripFromPath(path: string | undefined, dir: string): string | undefined {
+  if (!path) return path;
+  const parts = path.split(":").filter((p) => p !== dir);
+  return parts.join(":");
 }
 
 export function userBundlesDir(env: NodeJS.ProcessEnv): string {
