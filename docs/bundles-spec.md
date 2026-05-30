@@ -414,11 +414,11 @@ any) for confirmation; absent pin → no-op.
 ## PATH shim
 
 `umbel shim install [--force]` writes a bash script to
-`${UMBEL_ARTIFACTS_DIR:-$XDG_CONFIG_HOME/umbel}/bin/claude`. The user
+`${UMBEL_DATA_DIR:-$XDG_DATA_HOME/umbel}/bin/claude`. The user
 adds this directory to their shell rc:
 
 ```
-export PATH="$HOME/.config/umbel/bin:$PATH"
+export PATH="$HOME/.local/share/umbel/bin:$PATH"
 ```
 
 The shim's behavior:

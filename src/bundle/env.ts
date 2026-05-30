@@ -20,8 +20,22 @@ export function umbelArtifactsRoot(env: NodeJS.ProcessEnv): string {
   return join(base, "umbel");
 }
 
+/**
+ * Generated/state data root, separate from the curated config root. The PATH
+ * shim is generated ("Do not hand-edit"), so it belongs here under
+ * `$XDG_DATA_HOME/umbel`, not in `$XDG_CONFIG_HOME/umbel` where it would be
+ * swept into a version-controlled dotfiles tree.
+ */
+export function umbelDataRoot(env: NodeJS.ProcessEnv): string {
+  const override = env.UMBEL_DATA_DIR;
+  if (override && override.length > 0) return pathResolve(override);
+  const xdg = env.XDG_DATA_HOME;
+  const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share");
+  return join(base, "umbel");
+}
+
 export function shimDir(env: NodeJS.ProcessEnv): string {
-  return join(umbelArtifactsRoot(env), "bin");
+  return join(umbelDataRoot(env), "bin");
 }
 
 export function shimPath(env: NodeJS.ProcessEnv): string {

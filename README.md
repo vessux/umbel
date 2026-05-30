@@ -178,7 +178,7 @@ umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
-umbel shim install [--force]            # install ~/.config/umbel/bin/claude (the PATH shim)
+umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
 umbel shim uninstall                    # remove the shim
 umbel shim path                         # print the shim's absolute path
 umbel skills [options]                  # low-level skill installer (v0 picker)
@@ -197,9 +197,9 @@ the real `claude` binary when umbel has already resolved the launch (so
 subprocess shellouts to `claude` don't re-prompt):
 
 ```bash
-umbel shim install                       # writes ~/.config/umbel/bin/claude
+umbel shim install                       # writes ~/.local/share/umbel/bin/claude
 # then add to ~/.zshrc or ~/.bashrc:
-export PATH="$HOME/.config/umbel/bin:$PATH"
+export PATH="$HOME/.local/share/umbel/bin:$PATH"
 ```
 
 After that, plain `claude` in a project with a `.umbel-bundle` pin runs
@@ -279,6 +279,7 @@ Rows start checked iff currently installed correctly.
 | Var                   | Effect                                                                  |
 |-----------------------|-------------------------------------------------------------------------|
 | `UMBEL_ARTIFACTS_DIR` | Override artifact root (default: `$XDG_CONFIG_HOME/umbel`).             |
+| `UMBEL_DATA_DIR`      | Override generated-data root, home of the PATH shim (default: `$XDG_DATA_HOME/umbel`). |
 | `UMBEL_CACHE_DIR`     | Override compiled-bundle cache root (default: `$XDG_CACHE_HOME/umbel`). |
 | `UMBEL_BUNDLE`        | Used by `run` resolution (arg > env > pin). `__vanilla__` forces vanilla. |
 | `UMBEL_RESOLVED`      | Set by `umbel run` when spawning claude. The shim short-circuits to vanilla when present, so subprocess shellouts to `claude` don't re-prompt. |

@@ -87,7 +87,9 @@ describe("run() shim verb", () => {
   });
 
   function env(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
-    return { UMBEL_ARTIFACTS_DIR: artifacts, ...extra };
+    // Shim lives under the data root (UMBEL_DATA_DIR), not the config/artifacts
+    // root — point it at the temp dir so tests never touch ~/.local/share.
+    return { UMBEL_DATA_DIR: artifacts, ...extra };
   }
 
   it("shim install creates the file and prints PATH= hint", async () => {

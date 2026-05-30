@@ -17,7 +17,7 @@ Bundle verbs:
   umbel run [name] [-- ...]           Launch claude with bundle flags, or vanilla if no pin/picker chose so.
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
-  umbel shim install [--force]        Install the PATH shim (~/.config/umbel/bin/claude).
+  umbel shim install [--force]        Install the PATH shim (~/.local/share/umbel/bin/claude).
   umbel shim uninstall                Remove the shim.
   umbel shim path                     Print the shim's absolute path.
 
@@ -32,6 +32,7 @@ Skills picker (v0, low-level):
 
 Env:
   UMBEL_ARTIFACTS_DIR  Override the artifact root (default: \$XDG_CONFIG_HOME/umbel).
+  UMBEL_DATA_DIR       Override the generated-data root, home of the PATH shim (default: \$XDG_DATA_HOME/umbel).
   UMBEL_CACHE_DIR      Override compiled-bundle cache root (default: \$XDG_CACHE_HOME/umbel).
   UMBEL_BUNDLE         Used by 'run' name resolution (arg > env > pin). Set to "__vanilla__" to force vanilla.
   UMBEL_RESOLVED       Set automatically when 'umbel run' spawns claude; the shim short-circuits to vanilla if set.
