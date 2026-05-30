@@ -51,6 +51,14 @@ export interface BundleManifest {
   /** List of qualified `<source>/<leaf>` refs. */
   mcps?: string[];
   mergeMcp?: boolean;
+  /**
+   * Opt-in full isolation. When true, the session loads ONLY the bundle's own
+   * artifacts: the launch adds `--bare`, so Claude Code skips the user's
+   * globally-enabled plugins, `~/.claude/skills`, and project-scope
+   * auto-discovery. Default (false/absent) keeps today's additive behaviour —
+   * `--plugin-dir` layers the bundle on top of whatever is already enabled.
+   */
+  isolate?: boolean;
   settings?: BundleSettings;
   body: string;
   sourcePath: string;
@@ -111,6 +119,12 @@ export function loadManifest(path: string): ManifestResult {
   if (data.mergeMcp !== undefined) {
     manifest.mergeMcp = data.mergeMcp as boolean;
   }
+  if (data.isolate !== undefined) {
+    if (typeof data.isolate !== "boolean") {
+      throw new UsageError(`bundle ${path}: 'isolate' must be a boolean`);
+    }
+    manifest.isolate = data.isolate;
+  }
   if (data.settings !== undefined) {
     const settings = data.settings as Record<string, unknown>;
     for (const key of Object.keys(settings)) {
@@ -144,6 +158,7 @@ const KNOWN_FIELDS = new Set([
   "hooks",
   "mcps",
   "mergeMcp",
+  "isolate",
   "settings",
 ]);
 

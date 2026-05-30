@@ -46,6 +46,58 @@ describe("computeClaudeArgs", () => {
   });
 });
 
+// Opt-in isolation (`isolate: true`).
+//
+// `umbel run <bundle>` launches `claude --plugin-dir <cache>`. In Claude Code
+// 2.1.x `--plugin-dir` ADDS the bundle plugin on top of normal discovery — it
+// does NOT suppress the user's globally-enabled plugins (`enabledPlugins` in
+// ~/.claude/settings.json) nor ~/.claude/skills. So those skills leak into a
+// bundle session. `isolate: true` opts a bundle into `--bare`, the documented
+// lever that loads ONLY the --plugin-dir plugin (and its own skills/agents).
+// Isolation is opt-in to preserve today's additive default behaviour.
+describe("computeClaudeArgs — opt-in isolation (isolate: true)", () => {
+  const cache = "/abs/cache";
+
+  const isolatesUserPlugins = (args: string[]): boolean => {
+    if (args.includes("--bare")) return true;
+    const i = args.indexOf("--setting-sources");
+    if (i === -1) return false;
+    const sources = (args[i + 1] ?? "").split(",").map((s) => s.trim());
+    return sources.length > 0 && !sources.includes("user");
+  };
+
+  it("does NOT isolate by default — additive behaviour preserved", () => {
+    const args = computeClaudeArgs(bundle({ skills: ["superpowers/brainstorming"] }), cache);
+    expect(isolatesUserPlugins(args)).toBe(false);
+    expect(args).toEqual(["--plugin-dir", cache]);
+  });
+
+  it("isolate: true drops the user's globally-enabled plugins", () => {
+    const args = computeClaudeArgs(
+      bundle({ skills: ["superpowers/brainstorming"], isolate: true }),
+      cache,
+    );
+    expect(isolatesUserPlugins(args)).toBe(true);
+    expect(args).toContain("--plugin-dir");
+    expect(args).toContain(cache);
+  });
+
+  it("isolate keeps the bundle's own settings flowing (still passes --settings)", () => {
+    const args = computeClaudeArgs(
+      bundle({ skills: ["local/tdd"], isolate: true, settings: { model: "claude-opus-4-7" } }),
+      cache,
+    );
+    expect(isolatesUserPlugins(args)).toBe(true);
+    expect(args).toContain("--settings");
+    expect(args).toContain(`${cache}/settings.json`);
+  });
+
+  it("isolate: false behaves like the default (no isolation)", () => {
+    const args = computeClaudeArgs(bundle({ skills: ["local/tdd"], isolate: false }), cache);
+    expect(isolatesUserPlugins(args)).toBe(false);
+  });
+});
+
 describe("formatClaudeInvocation", () => {
   it("renders a flag-only argv as backslash-continued bash", () => {
     const out = formatClaudeInvocation(["--plugin-dir", "/abs"]);

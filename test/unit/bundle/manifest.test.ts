@@ -102,6 +102,21 @@ Bundle for ad-hoc analysis.
     expect(warnings).toEqual([]);
   });
 
+  it.each([
+    ["true", true],
+    ["false", false],
+  ])("parses 'isolate: %s' as a known boolean field", (literal, expected) => {
+    const path = writeBundle("iso", `---\nname: iso\nisolate: ${literal}\n---\n`);
+    const { manifest, warnings } = loadManifest(path);
+    expect(manifest.isolate).toBe(expected);
+    expect(warnings).toEqual([]);
+  });
+
+  it("rejects non-boolean 'isolate'", () => {
+    const path = writeBundle("bad-iso", "---\nname: bad-iso\nisolate: yes-please\n---\n");
+    expect(() => loadManifest(path)).toThrow(/isolate.*boolean/i);
+  });
+
   it("rejects settings keys outside the whitelist", () => {
     const path = writeBundle(
       "bad-settings",

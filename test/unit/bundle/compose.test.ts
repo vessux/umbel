@@ -47,6 +47,16 @@ describe("compose", () => {
     expect(r.mergeMcp).toBe(true);
   });
 
+  it("inherits isolate from parent; child can override it off", () => {
+    const ix = index(
+      m("base", { isolate: true }),
+      m("child", { extends: ["base"], skills: ["c"] }),
+      m("opt-out", { extends: ["base"], isolate: false }),
+    );
+    expect(compose("child", ix).isolate).toBe(true);
+    expect(compose("opt-out", ix).isolate).toBe(false);
+  });
+
   it("deep-merges settings env across parent + child", () => {
     const ix = index(
       m("base", { settings: { model: "old", env: { A: "1" } } }),
