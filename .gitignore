@@ -9,7 +9,21 @@ coverage/
 .claude/
 .mcp.json
 
-# Private project memory — see CLAUDE.local.md
+# Private / local-only (never committed)
 CLAUDE.local.md
 docs/backlog.jsonl
 docs/worklog.jsonl
+.umbel-bundle
+
+# beads: the Dolt DB is the source of truth, backed to the git remote via
+# `bd dolt push` (refs/dolt/data); a clone runs `bd bootstrap`. The DB, credential,
+# and runtime are handled by beads' own .beads/.gitignore; config.yaml, metadata.json,
+# and README.md stay tracked (per beads) so a clone can bootstrap.
+# Two intentional overrides of beads' tracked-by-default files:
+#   - issues.jsonl: a ~60s-rewritten export — left tracked it churns and is one
+#     `git add -A` from looking like the backing. The Dolt ref is the only backing.
+#   - interactions.jsonl: an append-only agent-interaction AUDIT log (`bd audit`,
+#     for forensics / fine-tuning) — not worth auto-publishing raw agent logs to a
+#     public repo, and unused here.
+.beads/issues.jsonl
+.beads/interactions.jsonl

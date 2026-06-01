@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "umbel",
+  "project_id": "0f2a53ff-06ab-4507-8c9f-1093b2f2af0e"
+}

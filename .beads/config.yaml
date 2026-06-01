@@ -1,0 +1,5 @@
+no-git-ops: false
+
+export.git-add: false
+
+sync.remote: "git+https://github.com/vessux/umbel.git"
