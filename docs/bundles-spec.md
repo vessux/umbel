@@ -6,6 +6,10 @@ concurrent `claude` sessions in the same project, each operating under a
 different curated capability set, without mutating the user's real
 `~/.claude/` state.
 
+This spec is the mechanics. For *how to build well* — session rule injection,
+per-repo adaptation via a committed marker, base + swappable methods — see the
+[cookbook](./cookbook.md).
+
 ## Goals
 
 - Named, version-controlled bundles. Author once, share via `~/.config/umbel/bundles/`

@@ -45,7 +45,9 @@ settings:
 
 Every artifact ref is `<source>/<leaf>` — bare names are rejected. Bundles
 can also pull in `hooks:`; see
-[`docs/bundles-spec.md`](docs/bundles-spec.md) for the full schema.
+[`docs/bundles-spec.md`](docs/bundles-spec.md) for the full schema, and
+[`docs/cookbook.md`](docs/cookbook.md) for authoring patterns (per-session rule
+injection, per-repo adaptation, base + swappable methods).
 
 Launch Claude Code with that bundle:
 
