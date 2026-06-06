@@ -21,3 +21,17 @@ TypeScript / Node CLI (ESM, `>=18.17`). Unix only.
 - No comments unless the *why* is non-obvious.
 - Prefer editing existing files over adding new ones.
 - Errors flow through `CliError` / `UsageError` / `NotFoundError`; exit codes in `src/run.ts` and the README "Exit codes" table.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues (`vessux/umbel`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical labels — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
