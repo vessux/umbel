@@ -25,3 +25,4 @@ from the diff.
 | [0004](0004-claude-code-plugin-path-resolution.md) | Hook and MCP path resolution under Claude Code's plugin model |
 | [0005](0005-per-project-routing-path-shim.md) | Per-project bundle routing via a PATH shim, not project-local glue |
 | [0006](0006-public-release-shape.md) | Public release shape: name, scoped package, version reset, manual publish |
+| [0007](0007-multi-candidate-pins.md) | Multi-candidate pins: the pin is an ordered list, resolved by a scoped picker |

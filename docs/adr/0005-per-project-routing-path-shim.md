@@ -13,6 +13,10 @@ auto-applies its bundle with **zero project-local glue**. The pin file has three
 - the **`__vanilla__` sentinel** → run plain `claude`, no picker;
 - **absent** → interactive picker, or (non-TTY) silently fall through to vanilla.
 
+> The pin model is extended by [ADR-0007](0007-multi-candidate-pins.md): the pin is now an
+> ordered list of candidates, and a "bundle name" is the one-candidate case. The shim routing
+> described here is unchanged.
+
 A recursion guard, `UMBEL_RESOLVED=1` (exported when umbel exec's `claude`), makes the shim
 strip its own directory from PATH and exec the real binary — so in-session shellouts to
 `claude` don't re-enter the picker. The picker is **ephemeral**: only `umbel apply` writes a
