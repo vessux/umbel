@@ -333,6 +333,12 @@ async function runBundleApply(
   env: NodeJS.ProcessEnv,
   cwd: string,
 ): Promise<number> {
+  if (isMultiCandidatePin(cwd, homedir())) {
+    process.stderr.write(
+      "umbel apply: refusing to overwrite a multi-candidate pin; run 'umbel unpin' first\n",
+    );
+    return 2;
+  }
   const wantsVanilla = rest.includes("--vanilla");
   const positional = rest.filter((a) => !a.startsWith("--"));
 
