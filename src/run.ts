@@ -24,7 +24,13 @@ import {
   resolveBundleName,
 } from "./bundle/exec.ts";
 import { renderList } from "./bundle/list.ts";
-import { readPin, removePin, writePin, writeVanillaPin } from "./bundle/pin.ts";
+import {
+  isMultiCandidatePin,
+  readPin,
+  removePin,
+  writePin,
+  writeVanillaPin,
+} from "./bundle/pin.ts";
 import { renderShow } from "./bundle/show.ts";
 import { detectCapabilities } from "./config.ts";
 import { CliError, UsageError } from "./errors.ts";
@@ -37,7 +43,7 @@ import { probeAll } from "./state/probe.ts";
 import { resolveInteractiveTargets, targetFromOverride } from "./target/resolve.ts";
 import type { Capabilities, Options, Target } from "./types.ts";
 import { runInitWizard } from "./ui/bundle-init.ts";
-import { VANILLA_PICK, pickBundle } from "./ui/bundle-picker.ts";
+import { VANILLA_PICK, pickBundle, pickScopedBundle } from "./ui/bundle-picker.ts";
 import { askCustomPath, confirmApply } from "./ui/confirm.ts";
 import { pickSkills } from "./ui/picker.ts";
 import { promptTarget } from "./ui/target-prompt.ts";
@@ -200,12 +206,12 @@ async function pickBundleOrError(
     process.stderr.write(`umbel ${verb}: no bundles found\n`);
     return 3;
   }
-  const pin = readPin(cwd, homedir());
+  const def = readPin(cwd, homedir())?.candidates[0];
   const pickOpts: Parameters<typeof pickBundle>[0] = {
     entries: index.entries,
     message: `Select bundle (${verb}):`,
   };
-  if (pin && pin.kind === "bundle") pickOpts.pinnedName = pin.name;
+  if (def?.kind === "bundle") pickOpts.pinnedName = def.name;
   const picked = await pickBundle(pickOpts);
   return picked ?? 2;
 }
@@ -224,14 +230,14 @@ async function pickBundleOrVanilla(
   cwd: string,
   verb: "run" | "apply",
 ): Promise<PickRunApply> {
-  const pin = readPin(cwd, homedir());
+  const def = readPin(cwd, homedir())?.candidates[0];
   const pickOpts: Parameters<typeof pickBundle>[0] = {
     entries: index.entries,
     message: `Select bundle (${verb}):`,
     includeVanilla: true,
   };
-  if (pin?.kind === "bundle") pickOpts.pinnedName = pin.name;
-  if (pin?.kind === "vanilla") pickOpts.pinnedVanilla = true;
+  if (def?.kind === "bundle") pickOpts.pinnedName = def.name;
+  if (def?.kind === "vanilla") pickOpts.pinnedVanilla = true;
   const picked = await pickBundle(pickOpts);
   if (picked === null) return { kind: "exit", code: 2 };
   if (picked === VANILLA_PICK) return { kind: "vanilla" };
@@ -272,7 +278,23 @@ async function runBundleRun(rest: string[], env: NodeJS.ProcessEnv, cwd: string)
 
   let resolvedName: string;
   let pickedIndex: BundleIndex | undefined;
-  if (resolved.kind === "unresolved") {
+  if (resolved.kind === "multiple") {
+    if (!isInteractive(env)) {
+      const def = resolved.candidates[0]!;
+      if (def.kind === "vanilla") return execVanilla(claudeArgs, env);
+      resolvedName = def.name;
+    } else {
+      pickedIndex = loadBundleIndex(env, cwd);
+      const picked = await pickScopedBundle({
+        candidates: resolved.candidates,
+        entries: pickedIndex.entries,
+        message: "Select bundle (run):",
+      });
+      if (picked === null) return 2;
+      if (picked === VANILLA_PICK) return execVanilla(claudeArgs, env);
+      resolvedName = picked;
+    }
+  } else if (resolved.kind === "unresolved") {
     if (!isInteractive(env)) {
       return execVanilla(claudeArgs, env);
     }
