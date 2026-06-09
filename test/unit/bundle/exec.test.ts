@@ -181,4 +181,34 @@ describe("resolveBundleName", () => {
       via: "pin",
     });
   });
+
+  it("multi-candidate pin resolves to multiple via pin, in order", () => {
+    writeFileSync(join(cwd, ".umbel-bundle"), "discovery\ndelivery\n");
+    expect(resolveBundleName([], {}, cwd, home)).toEqual({
+      kind: "multiple",
+      via: "pin",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("arg still overrides a multi-candidate pin (bypasses the picker)", () => {
+    writeFileSync(join(cwd, ".umbel-bundle"), "discovery\ndelivery\n");
+    expect(resolveBundleName(["wanted"], {}, cwd, home)).toEqual({
+      kind: "named",
+      name: "wanted",
+      via: "arg",
+    });
+  });
+
+  it("UMBEL_BUNDLE still overrides a multi-candidate pin", () => {
+    writeFileSync(join(cwd, ".umbel-bundle"), "discovery\ndelivery\n");
+    expect(resolveBundleName([], { UMBEL_BUNDLE: "fromEnv" }, cwd, home)).toEqual({
+      kind: "named",
+      name: "fromEnv",
+      via: "env",
+    });
+  });
 });
