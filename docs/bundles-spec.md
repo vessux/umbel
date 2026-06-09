@@ -432,21 +432,20 @@ Behavior on non-TTY varies by verb:
 
 ### Full picker
 
-Used by `run` (no pin or single-line pin where the name is already resolved),
-`apply`, `show`, and `build` when invoked without an arg on a TTY. Shows every
+Used by `run` when nothing resolves (no pin, no arg, no `UMBEL_BUNDLE` env),
+and by `apply`, `show`, and `build` when invoked without an arg on a TTY. Shows every
 discovered bundle. For `run` and `apply`, a `(vanilla)` row is prepended. Row
 format:
 
 ```
   (vanilla)         Run claude with no bundle
-  data-science      Tools for data science work     [user] [pinned*]
+  data-science      Tools for data science work     [user] [pinned]
   base              Universal baseline              [user]
-  ds-no-mcp         DS without DuckDB MCP           [project] [extends: data-science]
+  ds-no-mcp         DS without DuckDB MCP           [project] [shadowed]
 ```
 
 The current pin (or vanilla pin) is pre-selected. `show` and `build` use the
-full picker but pre-select the default candidate when a multi-candidate pin is
-present.
+full picker but pre-select the default candidate when a pin is present.
 
 ### Scoped picker
 
@@ -468,7 +467,9 @@ distinguishing the default candidate (`yes*`) with a footnote.
 
 ### `unpin`
 
-`unpin` shows only the current pin (if any) for confirmation; absent pin → no-op.
+`unpin` removes the pin file immediately with no confirmation prompt. On success it
+prints `unpinned`; when no pin file exists it prints `no pin to remove` and exits 0
+(no-op).
 
 ## PATH shim
 
