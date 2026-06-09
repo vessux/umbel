@@ -23,7 +23,7 @@ import {
   resolveBundle,
   resolveBundleName,
 } from "./bundle/exec.ts";
-import { renderList } from "./bundle/list.ts";
+import { type RenderListOpts, renderList } from "./bundle/list.ts";
 import {
   isMultiCandidatePin,
   readPin,
@@ -398,8 +398,16 @@ function runBundleUnpin(cwd: string): number {
 
 function runBundleList(env: NodeJS.ProcessEnv, cwd: string): number {
   const index = loadBundleIndex(env, cwd);
+  const pin = readPin(cwd, homedir());
+  const opts: RenderListOpts = {};
+  if (pin) {
+    opts.pinnedNames = pin.candidates.flatMap((c) => (c.kind === "bundle" ? [c.name] : []));
+    if (pin.candidates.length > 1 && pin.candidates[0]!.kind === "bundle") {
+      opts.defaultName = pin.candidates[0]!.name;
+    }
+  }
   process.stdout.write(
-    renderList(index.entries, { userDir: index.userDir, projectDir: index.projectDir }),
+    renderList(index.entries, { userDir: index.userDir, projectDir: index.projectDir }, opts),
   );
   return 0;
 }
