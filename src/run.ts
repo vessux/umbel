@@ -290,7 +290,6 @@ async function runBundleRun(rest: string[], env: NodeJS.ProcessEnv, cwd: string)
         entries: pickedIndex.entries,
         message: "Select bundle (run):",
       });
-      if (picked === null) return 2;
       if (picked === VANILLA_PICK) return execVanilla(claudeArgs, env);
       resolvedName = picked;
     }

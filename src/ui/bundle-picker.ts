@@ -80,7 +80,7 @@ export async function pickScopedBundle(opts: {
   candidates: Candidate[];
   entries: BundleEntry[];
   message?: string;
-}): Promise<string | null> {
+}): Promise<string> {
   const { options, initialValue } = scopedPickerOptions(opts.candidates, opts.entries);
   return assertSelected(
     await select<string>({

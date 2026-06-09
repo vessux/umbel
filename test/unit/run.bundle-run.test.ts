@@ -141,6 +141,15 @@ describe("run() bundle run", () => {
     expect(stderr.join("")).toMatch(/building bundle 'beta'…/);
   });
 
+  it("multi-candidate pin (non-TTY) whose default is an unknown bundle exits 3", async () => {
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    bundleFile("alpha");
+    writeFileSync(join(cwd, ".umbel-bundle"), "ghost\nalpha\n");
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(3);
+    expect(stderr.join("")).toMatch(/ghost.*not found/);
+  });
+
   it("multi-candidate pin whose default is __vanilla__ (non-TTY) execs vanilla", async () => {
     mkdirSync(join(cwd, ".claude"), { recursive: true });
     bundleFile("alpha");
