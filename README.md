@@ -187,7 +187,7 @@ umbel skills [options]                  # low-level skill installer (v0 picker)
 ```
 
 When invoked without `[name]` on a TTY, `run` / `apply` / `show` / `build`
-open a single-select picker:
+open a picker — **full** or **scoped**, depending on the pin:
 
 - **Full picker** (no pin, or `run`/`apply`/`show`/`build` with no arg): every
   discovered bundle, `(vanilla)` row prepended. On non-TTY, `run` falls through
@@ -195,6 +195,7 @@ open a single-select picker:
 - **Scoped picker** (multi-candidate pin + `run`): exactly the pin's candidates,
   default (first) pre-selected, `(vanilla)` row only if `__vanilla__` is listed
   in the pin. Ephemeral — selecting a candidate does not rewrite the pin.
+  (this variant fires for `run` only; `apply`/`show`/`build` use the full picker)
 
 `show` and `build` always use the full picker but pre-select the default
 candidate when a pin is present. The current pin (or vanilla pin) is
@@ -234,7 +235,7 @@ delivery         # also relevant on this repo
 # __vanilla__    # parked: uncomment to offer plain claude too
 ```
 
-- **One candidate** → resolves directly and launches (byte-identical to old single-line pins).
+- **One candidate** → resolves directly and launches (backward-compatible with existing single-line pins).
 - **Many candidates** → scoped picker over just those candidates; the first is the default.
 - **`__vanilla__` line** → offers "plain claude" as an explicit candidate in the scoped picker.
 - **Absent / all-commented** → full picker on TTY, vanilla on non-TTY.
@@ -269,7 +270,7 @@ and [`CONTEXT.md`](CONTEXT.md) for rationale and terminology.
    - one candidate → run that bundle directly
    - `__vanilla__` sentinel → run plain claude
    - multiple candidates → scoped picker on TTY; default candidate on non-TTY
-4. No pin (or all candidates commented out): on TTY → full picker with `(vanilla)` row; on non-TTY → silent vanilla.
+4. No pin (or all candidates commented out) → on TTY: full picker with `(vanilla)` row; on non-TTY: silent vanilla.
 
 Arg and env bypass the picker entirely and are not constrained to the pin's candidate list.
 

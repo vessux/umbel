@@ -394,7 +394,7 @@ delivery         # also relevant on this repo
 
 | Pin content                      | Meaning                                                                         |
 |----------------------------------|---------------------------------------------------------------------------------|
-| One `<bundle>` line              | Resolves directly; no picker. Byte-identical to the old single-line format.     |
+| One `<bundle>` line              | Resolves directly; no picker. Backward-compatible with existing single-line pins.     |
 | `__vanilla__` (as single line)   | Run plain claude with no bundle, no picker.                                     |
 | Multiple lines                   | Scoped picker on TTY (candidates only, default pre-selected); default candidate on non-TTY. |
 | Absent / all-commented           | No pin → full picker on TTY, silent vanilla on non-TTY.                         |
