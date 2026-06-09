@@ -44,10 +44,13 @@ export function pinPath(cwd: string, home: string): string {
   return join(findProjectRoot(cwd, home) ?? cwd, PIN_FILE);
 }
 
-export type PinRead =
-  | { kind: "bundle"; name: string; path: string }
-  | { kind: "vanilla"; path: string };
+export type PinRead = { candidates: Candidate[]; path: string };
 
+/**
+ * Thin file-read wrapper over parsePin. Returns null when the file is missing
+ * or parses to zero candidates (absent ≡ no pin). On success, candidates has
+ * length >= 1, in file order.
+ */
 export function readPin(cwd: string, home: string): PinRead | null {
   const path = pinPath(cwd, home);
   let raw: string;
@@ -56,10 +59,13 @@ export function readPin(cwd: string, home: string): PinRead | null {
   } catch {
     return null;
   }
-  const body = raw.trim();
-  if (body.length === 0) return null;
-  if (body === VANILLA_SENTINEL) return { kind: "vanilla", path };
-  return { kind: "bundle", name: body, path };
+  const parsed = parsePin(raw);
+  return parsed.kind === "absent" ? null : { candidates: parsed.candidates, path };
+}
+
+export function isMultiCandidatePin(cwd: string, home: string): boolean {
+  const pin = readPin(cwd, home);
+  return pin !== null && pin.candidates.length > 1;
 }
 
 export function writePin(cwd: string, home: string, name: string): string {

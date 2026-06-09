@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   findProjectRoot,
+  isMultiCandidatePin,
   parsePin,
   readPin,
   removePin,
@@ -31,11 +32,21 @@ describe("pin file", () => {
     expect(readFileSync(path, "utf8")).toBe("data-science\n");
   });
 
-  it("reads back the pinned name", () => {
+  it("reads back a single bundle pin as one candidate", () => {
     writePin(project, home, "x");
     expect(readPin(project, home)).toEqual({
-      kind: "bundle",
-      name: "x",
+      candidates: [{ kind: "bundle", name: "x" }],
+      path: join(project, ".umbel-bundle"),
+    });
+  });
+
+  it("reads a hand-authored multi-candidate pin in order", () => {
+    writeFileSync(join(project, ".umbel-bundle"), "discovery\ndelivery\n");
+    expect(readPin(project, home)).toEqual({
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
       path: join(project, ".umbel-bundle"),
     });
   });
@@ -49,22 +60,34 @@ describe("pin file", () => {
     expect(readPin(project, home)).toBeNull();
   });
 
+  it("reads a vanilla pin as one vanilla candidate", () => {
+    const path = writeVanillaPin(project, home);
+    expect(readFileSync(path, "utf8")).toBe("__vanilla__\n");
+    expect(readPin(project, home)).toEqual({
+      candidates: [{ kind: "vanilla" }],
+      path,
+    });
+  });
+
+  it("returns null for an all-commented-out pin (≡ absent)", () => {
+    writeFileSync(join(project, ".umbel-bundle"), "# discovery\n# delivery\n");
+    expect(readPin(project, home)).toBeNull();
+  });
+
   it("walks up from a subdirectory to the project root for read", () => {
     writePin(project, home, "x");
     const sub = join(project, "src", "deep");
     mkdirSync(sub, { recursive: true });
-    const r = readPin(sub, home);
-    expect(r?.kind === "bundle" ? r.name : null).toBe("x");
+    expect(readPin(sub, home)?.candidates).toEqual([{ kind: "bundle", name: "x" }]);
   });
 
-  it("writeVanillaPin writes the sentinel and readPin returns vanilla", () => {
-    const path = writeVanillaPin(project, home);
-    expect(path).toBe(join(project, ".umbel-bundle"));
-    expect(readFileSync(path, "utf8")).toBe("__vanilla__\n");
-    expect(readPin(project, home)).toEqual({
-      kind: "vanilla",
-      path,
-    });
+  it("isMultiCandidatePin is true only for >1 candidate", () => {
+    writePin(project, home, "solo");
+    expect(isMultiCandidatePin(project, home)).toBe(false);
+    writeFileSync(join(project, ".umbel-bundle"), "a\nb\n");
+    expect(isMultiCandidatePin(project, home)).toBe(true);
+    removePin(project, home);
+    expect(isMultiCandidatePin(project, home)).toBe(false);
   });
 
   it("removePin removes the file and returns true", () => {
