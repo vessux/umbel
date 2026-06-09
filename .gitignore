@@ -14,6 +14,9 @@ CLAUDE.local.md
 docs/backlog.jsonl
 docs/worklog.jsonl
 .umbel-bundle
+# delivery-superpowers: the locations hook redirects superpowers' specs/plans
+# here instead of the vendored docs/superpowers/ default. Machine-local only.
+.local
 
 # beads: the Dolt DB is the source of truth, backed to the git remote via
 # `bd dolt push` (refs/dolt/data); a clone runs `bd bootstrap`. The DB, credential,
