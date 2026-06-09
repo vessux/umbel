@@ -5,6 +5,32 @@ import { findClaudeAncestor } from "../target/walk.ts";
 const PIN_FILE = ".umbel-bundle";
 const VANILLA_SENTINEL = "__vanilla__";
 
+export type Candidate = { kind: "bundle"; name: string } | { kind: "vanilla" };
+
+export type ParsedPin = { kind: "absent" } | { kind: "candidates"; candidates: Candidate[] };
+
+/**
+ * Parse `.umbel-bundle` text into an ordered candidate list. Pure (no I/O).
+ * Owns the whole grammar: one candidate per line; `#` starts a comment
+ * (safe — a bundle name can never contain `#`); blank lines skipped; lines
+ * trimmed; duplicates dropped preserving first occurrence. Zero candidates
+ * (empty or all-commented) is `absent`, behaving exactly like no pin.
+ */
+export function parsePin(raw: string): ParsedPin {
+  const seen = new Set<string>();
+  const candidates: Candidate[] = [];
+  for (const line of raw.split("\n")) {
+    const hash = line.indexOf("#");
+    const text = (hash === -1 ? line : line.slice(0, hash)).trim();
+    if (text.length === 0 || seen.has(text)) continue;
+    seen.add(text);
+    candidates.push(
+      text === VANILLA_SENTINEL ? { kind: "vanilla" } : { kind: "bundle", name: text },
+    );
+  }
+  return candidates.length === 0 ? { kind: "absent" } : { kind: "candidates", candidates };
+}
+
 /**
  * Walk to the nearest `.claude/` ancestor. Pin lookups cross `.git`
  * boundaries (unlike bundle/skills discovery) so a `.claude/` at a parent

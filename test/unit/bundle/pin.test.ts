@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   findProjectRoot,
+  parsePin,
   readPin,
   removePin,
   writePin,
@@ -89,5 +90,88 @@ describe("pin file", () => {
     } finally {
       cleanup(standalone);
     }
+  });
+});
+
+describe("parsePin", () => {
+  it("single name is one bundle candidate (byte-compatible with old pins)", () => {
+    expect(parsePin("data-science\n")).toEqual({
+      kind: "candidates",
+      candidates: [{ kind: "bundle", name: "data-science" }],
+    });
+  });
+
+  it("empty / whitespace-only file is absent", () => {
+    expect(parsePin("")).toEqual({ kind: "absent" });
+    expect(parsePin("   \n\t\n")).toEqual({ kind: "absent" });
+  });
+
+  it("multiple lines become an ordered candidate list", () => {
+    expect(parsePin("discovery\ndelivery\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("strips full-line and inline trailing # comments", () => {
+    expect(parsePin("# why these two\ndiscovery  # primary\ndelivery # secondary\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("skips blank and whitespace-only lines, trims each candidate", () => {
+    expect(parsePin("\n  discovery  \n\n   \n delivery\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("dedupes preserving first occurrence", () => {
+    expect(parsePin("a\nb\na\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "a" },
+        { kind: "bundle", name: "b" },
+      ],
+    });
+  });
+
+  it("__vanilla__ is a candidate among bundles", () => {
+    expect(parsePin("discovery\n__vanilla__\ndelivery\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "vanilla" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("__vanilla__ as the sole candidate (direct vanilla)", () => {
+    expect(parsePin("__vanilla__\n")).toEqual({
+      kind: "candidates",
+      candidates: [{ kind: "vanilla" }],
+    });
+  });
+
+  it("all-commented-out parses to absent", () => {
+    expect(parsePin("# discovery\n# delivery\n")).toEqual({ kind: "absent" });
+  });
+
+  it("keeps a source-qualified candidate name intact", () => {
+    expect(parsePin("myrepo/data-science\n")).toEqual({
+      kind: "candidates",
+      candidates: [{ kind: "bundle", name: "myrepo/data-science" }],
+    });
   });
 });
