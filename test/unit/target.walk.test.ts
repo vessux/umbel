@@ -51,6 +51,14 @@ describe("findClaudeSkillsDir", () => {
     expect(findClaudeSkillsDir(project, home)).toBeNull();
   });
 
+  it("treats home as an exclusive boundary even when ~/.claude exists", () => {
+    const home = join(root, "home");
+    mkdirSync(join(home, ".claude"), { recursive: true }); // global config dir, not a project
+    const project = join(home, "proj");
+    mkdirSync(project, { recursive: true });
+    expect(findClaudeSkillsDir(project, home)).toBeNull();
+  });
+
   it("returns null when nothing is found", () => {
     const deep = join(root, "a", "b");
     mkdirSync(deep, { recursive: true });

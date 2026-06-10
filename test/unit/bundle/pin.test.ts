@@ -116,6 +116,39 @@ describe("pin file", () => {
   });
 });
 
+describe("pin does not escape to $HOME via the global ~/.claude", () => {
+  let home: string;
+
+  beforeEach(() => {
+    home = makeTmpDir("home-");
+    // ~/.claude is the GLOBAL Claude config dir — present on any machine that
+    // has run Claude. It must never be mistaken for a project root.
+    mkdirSync(join(home, ".claude"), { recursive: true });
+  });
+  afterEach(() => {
+    cleanup(home);
+  });
+
+  it("anchors the pin at the repo, not $HOME, when the repo lacks .claude/", () => {
+    const repo = join(home, "fresh-clone");
+    mkdirSync(repo, { recursive: true });
+    const path = writePin(repo, home, "discovery");
+    expect(path).toBe(join(repo, ".umbel-bundle"));
+    expect(path).not.toBe(join(home, ".umbel-bundle"));
+  });
+
+  it("findProjectRoot stops at the home boundary instead of matching ~/.claude", () => {
+    const repo = join(home, "fresh-clone");
+    mkdirSync(repo, { recursive: true });
+    expect(findProjectRoot(repo, home)).toBeNull();
+  });
+
+  it("applying directly at $HOME (cwd === home) falls back to cwd, not the global ~/.claude", () => {
+    expect(findProjectRoot(home, home)).toBeNull();
+    expect(writePin(home, home, "discovery")).toBe(join(home, ".umbel-bundle"));
+  });
+});
+
 describe("parsePin", () => {
   it("single name is one bundle candidate (byte-compatible with old pins)", () => {
     expect(parsePin("data-science\n")).toEqual({
