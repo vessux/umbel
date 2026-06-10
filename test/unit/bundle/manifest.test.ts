@@ -171,6 +171,29 @@ mcps:
     expect(() => loadManifest(path)).toThrow(/mcps.*list.*qualified/i);
   });
 
+  it.each([
+    ["extends", "good"],
+    ["skills", "local/demo"],
+    ["agents", "data-scientist"],
+  ])("rejects scalar %s where a list is required", (field, value) => {
+    const path = writeBundle(
+      `scalar-${field}`,
+      `---\nname: scalar-${field}\n${field}: ${value}\n---\n`,
+    );
+    expect(() => loadManifest(path)).toThrow(new RegExp(`${field}.*list`, "i"));
+  });
+
+  it.each(["extends", "skills", "agents"])(
+    "rejects %s list containing a non-string element",
+    (field) => {
+      const path = writeBundle(
+        `nonstring-${field}`,
+        `---\nname: nonstring-${field}\n${field}: [123]\n---\n`,
+      );
+      expect(() => loadManifest(path)).toThrow(new RegExp(`${field}.*list`, "i"));
+    },
+  );
+
   it("warns on unknown frontmatter field but does not error", () => {
     const path = writeBundle(
       "with-unknown",

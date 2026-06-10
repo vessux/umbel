@@ -84,12 +84,25 @@ export function loadManifest(path: string): ManifestResult {
     manifest.description = data.description as string;
   }
   if (data.extends !== undefined) {
+    if (!Array.isArray(data.extends) || !data.extends.every((e) => typeof e === "string")) {
+      throw new UsageError(`bundle ${path}: 'extends' must be a list of names`);
+    }
     manifest.extends = data.extends as string[];
   }
   if (data.skills !== undefined) {
+    if (!Array.isArray(data.skills) || !data.skills.every((s) => typeof s === "string")) {
+      throw new UsageError(
+        `bundle ${path}: 'skills' must be a list of qualified <source>/<name> refs`,
+      );
+    }
     manifest.skills = data.skills as string[];
   }
   if (data.agents !== undefined) {
+    if (!Array.isArray(data.agents) || !data.agents.every((a) => typeof a === "string")) {
+      throw new UsageError(
+        `bundle ${path}: 'agents' must be a list of qualified <source>/<name> refs`,
+      );
+    }
     manifest.agents = data.agents as string[];
   }
   if (data.hooks !== undefined) {
