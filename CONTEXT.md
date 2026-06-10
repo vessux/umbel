@@ -1,18 +1,32 @@
 # umbel
 
-umbel composes per-project sets of Claude Code skills/agents into a **bundle** and routes plain `claude` invocations through the bundle that a project has selected.
+umbel composes per-project sets of skills/agents/config into a **bundle** and routes a harness invocation (today, plain `claude`) through the bundle that a project has selected.
 
 ## Language
 
 ### Bundles & running
 
 **Bundle**:
-A named, composable set of skills/agents/config that Claude Code runs under.
+A named, composable set of skills/agents/config that a **harness** runs under (today, only Claude Code).
 _Avoid_: package, profile, preset.
 
 **Vanilla**:
-Running plain `claude` with no bundle applied.
+Running a harness with no bundle applied (today, plain `claude`).
 _Avoid_: bare, default, none.
+
+### Harnesses
+
+**Harness**:
+The coding-agent CLI a bundle is compiled for and run under. Claude Code is the only shipped harness; OpenCode, Pi, and GitHub Copilot CLI are in design.
+_Avoid_: backend, runtime, engine, target.
+
+**Adapter**:
+The per-harness component that maps a bundle to one harness's native form, declaring which of the bundle's capabilities that harness supports, degrades, or cannot express.
+_Avoid_: driver, plugin, backend.
+
+**Capability**:
+One of the five artifact kinds — skills, agents, hooks, mcps, settings — seen as a harness-agnostic axis. A bundle declares capabilities by naming artifacts; each adapter maps a capability to its harness's native form, degrades it (**best-effort**), or marks it **unsupported**. There is no abstract layer above the kinds.
+_Avoid_: feature, primitive.
 
 ### Pinning
 

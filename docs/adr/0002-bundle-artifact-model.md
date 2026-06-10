@@ -13,6 +13,10 @@ are rejected. There is exactly **one on-disk shape per kind** — no parallel in
 Cross-source name collisions are disambiguated **at scan time** to `<source>-<leaf>`, so an
 install name is unique before the planner or compiler ever sees it.
 
+> Extended by [ADR-0009](0009-capability-axes-are-the-artifact-kinds.md): these four kinds
+> (plus `settings`) double as the harness-agnostic **capability axes** for multi-harness
+> support — umbel deliberately does *not* introduce an abstract capability layer above them.
+
 Two kinds were deliberately removed and are *not* artifact roots:
 
 - **`commands`** — express a user-invokable command as a skill with

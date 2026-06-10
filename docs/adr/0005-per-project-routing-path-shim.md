@@ -16,6 +16,10 @@ auto-applies its bundle with **zero project-local glue**. The pin file has three
 > The pin model is extended by [ADR-0007](0007-multi-candidate-pins.md): the pin is now an
 > ordered list of candidates, and a "bundle name" is the one-candidate case. The shim routing
 > described here is unchanged.
+>
+> Generalised by [ADR-0010](0010-harness-selected-by-invoked-binary.md) for multi-harness:
+> the shim grows to one binary per harness (`bin/opencode`, `bin/pi`, …), and **the invoked
+> binary selects the harness**. The pin still names only the bundle.
 
 A recursion guard, `UMBEL_RESOLVED=1` (exported when umbel exec's `claude`), makes the shim
 strip its own directory from PATH and exec the real binary — so in-session shellouts to

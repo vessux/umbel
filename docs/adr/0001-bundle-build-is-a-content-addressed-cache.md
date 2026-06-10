@@ -13,6 +13,12 @@ that cache via CLI flags — `--plugin-dir`, and, when the bundle declares them,
 resolved `bundle.md` recording the manifest and the recommended invocation, so the cache
 — not the umbel binary — is the contract a consumer reads.
 
+> Generalised by [ADR-0008](0008-graded-harness-isolation.md) for multi-harness support: the
+> flag list becomes a per-harness launch spec (`{binary, args, env}`) and the cache is
+> produced per harness. The **non-mutation** guarantee below is unchanged; what ADR-0008 adds
+> is that **suppression of ambient config is graded** — strict on Claude Code, weaker on
+> harnesses that offer no strict mode.
+
 This generalised an earlier design that emitted configuration for one specific external
 sandbox launcher. Owning a single consumer's config surface would have coupled the two
 projects and pushed umbel toward being a plugin-authoring tool for that one sandbox.

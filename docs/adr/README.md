@@ -26,3 +26,6 @@ from the diff.
 | [0005](0005-per-project-routing-path-shim.md) | Per-project bundle routing via a PATH shim, not project-local glue |
 | [0006](0006-public-release-shape.md) | Public release shape: name, scoped package, version reset, manual publish |
 | [0007](0007-multi-candidate-pins.md) | Multi-candidate pins: the pin is an ordered list, resolved by a scoped picker |
+| [0008](0008-graded-harness-isolation.md) | Harness isolation is graded; config injection is a per-harness launch spec |
+| [0009](0009-capability-axes-are-the-artifact-kinds.md) | The capability axes are the existing artifact kinds — no abstract layer, no rename |
+| [0010](0010-harness-selected-by-invoked-binary.md) | The harness is selected by the invoked binary, not declared by the bundle |
