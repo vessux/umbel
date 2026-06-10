@@ -3,7 +3,18 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ResolvedBundle } from "../../../src/bundle/compose.ts";
 import { resolveSources } from "../../../src/bundle/resolve.ts";
+import { CliError } from "../../../src/errors.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
+
+function thrown(fn: () => unknown): CliError {
+  try {
+    fn();
+  } catch (e) {
+    if (e instanceof CliError) return e;
+    throw e;
+  }
+  throw new Error("expected function to throw");
+}
 
 describe("resolveSources", () => {
   let root: string;
@@ -60,18 +71,20 @@ describe("resolveSources", () => {
     expect(out.warnings).toEqual([]);
   });
 
-  it("bare ref (no '/') in manifest → hints at missing source qualifier", () => {
+  it("bare ref (no '/') in manifest → usage error (exit 2), hints at missing source qualifier", () => {
     mkSubArtifact(roots.skills, "local", "tdd");
-    expect(() => resolveSources(bundle({ skills: ["tdd"] }), { roots })).toThrow(
-      /missing source qualifier; use '<source>\/<leaf>'/,
-    );
+    const err = thrown(() => resolveSources(bundle({ skills: ["tdd"] }), { roots }));
+    expect(err.name).toBe("UsageError");
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/missing source qualifier; use '<source>\/<leaf>'/);
   });
 
-  it("qualified-but-missing ref → original 'not found' message (no hint)", () => {
+  it("qualified-but-missing ref → not found (exit 3), original 'not found' message (no hint)", () => {
     mkSubArtifact(roots.skills, "local", "tdd");
-    expect(() => resolveSources(bundle({ skills: ["local/ghost"] }), { roots })).toThrow(
-      /source\(s\) not found: skills\/local\/ghost/,
-    );
+    const err = thrown(() => resolveSources(bundle({ skills: ["local/ghost"] }), { roots }));
+    expect(err.name).toBe("NotFoundError");
+    expect(err.exitCode).toBe(3);
+    expect(err.message).toMatch(/source\(s\) not found: skills\/local\/ghost/);
   });
 
   it("resolves all artifact kinds independently", () => {

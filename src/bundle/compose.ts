@@ -1,4 +1,4 @@
-import { UsageError } from "../errors.ts";
+import { NotFoundError, UsageError } from "../errors.ts";
 import { ARTIFACT_KINDS } from "./kinds.ts";
 import type { BundleManifest, BundleSettings } from "./manifest.ts";
 
@@ -6,7 +6,7 @@ export type ResolvedBundle = Omit<BundleManifest, "extends">;
 
 export function compose(name: string, index: Map<string, BundleManifest>): ResolvedBundle {
   if (!index.has(name)) {
-    throw new UsageError(`bundle '${name}' not found`);
+    throw new NotFoundError(`bundle '${name}' not found`);
   }
   const order = linearize(name, index);
   // order is oldest-first: ancestors before descendants. Merge left-to-right
@@ -43,7 +43,7 @@ function linearize(start: string, index: Map<string, BundleManifest>): string[] 
     }
     const cur = index.get(n);
     if (!cur) {
-      throw new UsageError(
+      throw new NotFoundError(
         `bundle '${start}' extends missing parent '${n}' (chain: ${[...stack, n].join(" → ")})`,
       );
     }
