@@ -120,4 +120,43 @@ describe("run() bundle run", () => {
     );
     expect(code).toBe(0);
   });
+
+  it("multi-candidate pin (non-TTY) resolves to the first/default candidate and builds it", async () => {
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    bundleFile("alpha");
+    bundleFile("beta");
+    writeFileSync(join(cwd, ".umbel-bundle"), "alpha\nbeta\n");
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(1); // claude not on PATH=/
+    expect(stderr.join("")).toMatch(/building bundle 'alpha'…/);
+    expect(stderr.join("")).not.toMatch(/building bundle 'beta'/);
+  });
+
+  it("candidate order is semantic — reordering changes the non-TTY default", async () => {
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    bundleFile("alpha");
+    bundleFile("beta");
+    writeFileSync(join(cwd, ".umbel-bundle"), "beta\nalpha\n");
+    await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(stderr.join("")).toMatch(/building bundle 'beta'…/);
+  });
+
+  it("multi-candidate pin (non-TTY) whose default is an unknown bundle exits 3", async () => {
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    bundleFile("alpha");
+    writeFileSync(join(cwd, ".umbel-bundle"), "ghost\nalpha\n");
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(3);
+    expect(stderr.join("")).toMatch(/ghost.*not found/);
+  });
+
+  it("multi-candidate pin whose default is __vanilla__ (non-TTY) execs vanilla", async () => {
+    mkdirSync(join(cwd, ".claude"), { recursive: true });
+    bundleFile("alpha");
+    writeFileSync(join(cwd, ".umbel-bundle"), "__vanilla__\nalpha\n");
+    const code = await run(["run"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(1);
+    expect(stderr.join("")).toMatch(/'claude' not found on PATH/);
+    expect(stderr.join("")).not.toMatch(/building bundle/);
+  });
 });

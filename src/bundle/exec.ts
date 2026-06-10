@@ -14,7 +14,7 @@ import {
   userBundlesDir,
 } from "./env.ts";
 import type { BundleManifest } from "./manifest.ts";
-import { readPin } from "./pin.ts";
+import { type Candidate, readPin } from "./pin.ts";
 import { type ResolvedSources, resolveSources } from "./resolve.ts";
 
 const VANILLA_ENV_SENTINEL = "__vanilla__";
@@ -22,6 +22,7 @@ const VANILLA_ENV_SENTINEL = "__vanilla__";
 export type ResolveResult =
   | { kind: "named"; name: string; via: "arg" | "env" | "pin" }
   | { kind: "vanilla"; via: "env" | "pin" }
+  | { kind: "multiple"; candidates: Candidate[]; via: "pin" }
   | { kind: "unresolved"; message: string };
 
 export function resolveBundleName(
@@ -39,8 +40,13 @@ export function resolveBundleName(
   }
   const pin = readPin(cwd, home);
   if (pin) {
-    if (pin.kind === "vanilla") return { kind: "vanilla", via: "pin" };
-    return { kind: "named", name: pin.name, via: "pin" };
+    if (pin.candidates.length === 1) {
+      const c = pin.candidates[0]!;
+      return c.kind === "vanilla"
+        ? { kind: "vanilla", via: "pin" }
+        : { kind: "named", name: c.name, via: "pin" };
+    }
+    return { kind: "multiple", candidates: pin.candidates, via: "pin" };
   }
   return {
     kind: "unresolved",

@@ -1,8 +1,10 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   findProjectRoot,
+  isMultiCandidatePin,
+  parsePin,
   readPin,
   removePin,
   writePin,
@@ -30,11 +32,21 @@ describe("pin file", () => {
     expect(readFileSync(path, "utf8")).toBe("data-science\n");
   });
 
-  it("reads back the pinned name", () => {
+  it("reads back a single bundle pin as one candidate", () => {
     writePin(project, home, "x");
     expect(readPin(project, home)).toEqual({
-      kind: "bundle",
-      name: "x",
+      candidates: [{ kind: "bundle", name: "x" }],
+      path: join(project, ".umbel-bundle"),
+    });
+  });
+
+  it("reads a hand-authored multi-candidate pin in order", () => {
+    writeFileSync(join(project, ".umbel-bundle"), "discovery\ndelivery\n");
+    expect(readPin(project, home)).toEqual({
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
       path: join(project, ".umbel-bundle"),
     });
   });
@@ -48,22 +60,34 @@ describe("pin file", () => {
     expect(readPin(project, home)).toBeNull();
   });
 
+  it("reads a vanilla pin as one vanilla candidate", () => {
+    const path = writeVanillaPin(project, home);
+    expect(readFileSync(path, "utf8")).toBe("__vanilla__\n");
+    expect(readPin(project, home)).toEqual({
+      candidates: [{ kind: "vanilla" }],
+      path,
+    });
+  });
+
+  it("returns null for an all-commented-out pin (≡ absent)", () => {
+    writeFileSync(join(project, ".umbel-bundle"), "# discovery\n# delivery\n");
+    expect(readPin(project, home)).toBeNull();
+  });
+
   it("walks up from a subdirectory to the project root for read", () => {
     writePin(project, home, "x");
     const sub = join(project, "src", "deep");
     mkdirSync(sub, { recursive: true });
-    const r = readPin(sub, home);
-    expect(r?.kind === "bundle" ? r.name : null).toBe("x");
+    expect(readPin(sub, home)?.candidates).toEqual([{ kind: "bundle", name: "x" }]);
   });
 
-  it("writeVanillaPin writes the sentinel and readPin returns vanilla", () => {
-    const path = writeVanillaPin(project, home);
-    expect(path).toBe(join(project, ".umbel-bundle"));
-    expect(readFileSync(path, "utf8")).toBe("__vanilla__\n");
-    expect(readPin(project, home)).toEqual({
-      kind: "vanilla",
-      path,
-    });
+  it("isMultiCandidatePin is true only for >1 candidate", () => {
+    writePin(project, home, "solo");
+    expect(isMultiCandidatePin(project, home)).toBe(false);
+    writeFileSync(join(project, ".umbel-bundle"), "a\nb\n");
+    expect(isMultiCandidatePin(project, home)).toBe(true);
+    removePin(project, home);
+    expect(isMultiCandidatePin(project, home)).toBe(false);
   });
 
   it("removePin removes the file and returns true", () => {
@@ -89,5 +113,88 @@ describe("pin file", () => {
     } finally {
       cleanup(standalone);
     }
+  });
+});
+
+describe("parsePin", () => {
+  it("single name is one bundle candidate (byte-compatible with old pins)", () => {
+    expect(parsePin("data-science\n")).toEqual({
+      kind: "candidates",
+      candidates: [{ kind: "bundle", name: "data-science" }],
+    });
+  });
+
+  it("empty / whitespace-only file is absent", () => {
+    expect(parsePin("")).toEqual({ kind: "absent" });
+    expect(parsePin("   \n\t\n")).toEqual({ kind: "absent" });
+  });
+
+  it("multiple lines become an ordered candidate list", () => {
+    expect(parsePin("discovery\ndelivery\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("strips full-line and inline trailing # comments", () => {
+    expect(parsePin("# why these two\ndiscovery  # primary\ndelivery # secondary\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("skips blank and whitespace-only lines, trims each candidate", () => {
+    expect(parsePin("\n  discovery  \n\n   \n delivery\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("dedupes preserving first occurrence", () => {
+    expect(parsePin("a\nb\na\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "a" },
+        { kind: "bundle", name: "b" },
+      ],
+    });
+  });
+
+  it("__vanilla__ is a candidate among bundles", () => {
+    expect(parsePin("discovery\n__vanilla__\ndelivery\n")).toEqual({
+      kind: "candidates",
+      candidates: [
+        { kind: "bundle", name: "discovery" },
+        { kind: "vanilla" },
+        { kind: "bundle", name: "delivery" },
+      ],
+    });
+  });
+
+  it("__vanilla__ as the sole candidate (direct vanilla)", () => {
+    expect(parsePin("__vanilla__\n")).toEqual({
+      kind: "candidates",
+      candidates: [{ kind: "vanilla" }],
+    });
+  });
+
+  it("all-commented-out parses to absent", () => {
+    expect(parsePin("# discovery\n# delivery\n")).toEqual({ kind: "absent" });
+  });
+
+  it("keeps a source-qualified candidate name intact", () => {
+    expect(parsePin("myrepo/data-science\n")).toEqual({
+      kind: "candidates",
+      candidates: [{ kind: "bundle", name: "myrepo/data-science" }],
+    });
   });
 });

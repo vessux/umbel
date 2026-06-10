@@ -6,7 +6,8 @@ export interface ListScopeDirs {
 }
 
 export interface RenderListOpts {
-  pinnedName?: string;
+  pinnedNames?: string[];
+  defaultName?: string;
 }
 
 export function renderList(
@@ -17,7 +18,11 @@ export function renderList(
   if (entries.length === 0) {
     return "no bundles found\n";
   }
-  return formatGroups(entries, dirs, opts);
+  let out = formatGroups(entries, dirs, opts);
+  if (opts.defaultName !== undefined && entries.some((e) => e.name === opts.defaultName)) {
+    out += "\n  * default candidate (resolved when no bundle is chosen)\n";
+  }
+  return out;
 }
 
 function formatGroups(entries: BundleEntry[], dirs: ListScopeDirs, opts: RenderListOpts): string {
@@ -46,11 +51,12 @@ function formatGroups(entries: BundleEntry[], dirs: ListScopeDirs, opts: RenderL
 
 function formatTable(rows: BundleEntry[], opts: RenderListOpts): string[] {
   const headers = ["NAME", "DESCRIPTION", "EXTENDS", "PINNED"];
+  const pinned = new Set(opts.pinnedNames ?? []);
   const data: string[][] = rows.map((r) => [
     r.name,
     r.manifest?.description ?? "—",
     (r.manifest?.extends ?? []).join(", ") || "—",
-    opts.pinnedName !== undefined && opts.pinnedName === r.name ? "yes" : "—",
+    pinned.has(r.name) ? (r.name === opts.defaultName ? "yes*" : "yes") : "—",
   ]);
   const widths = headers.map((h, i) => Math.max(h.length, ...data.map((row) => row[i]!.length)));
   const fmt = (cells: string[]): string =>

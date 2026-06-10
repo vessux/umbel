@@ -336,11 +336,12 @@ Resolution order for `<name>`:
 
 1. Explicit positional arg.
 2. `UMBEL_BUNDLE` env var (literal `__vanilla__` resolves to vanilla; see below).
-3. Pin file `<project>/.umbel-bundle`. Three states:
-   - Bundle name → run that bundle.
-   - `__vanilla__` sentinel → run plain claude, no flags, no picker.
-   - Absent / empty → unresolved (continue to step 4).
-4. No source: on TTY, open the run picker with a `(vanilla)` row prepended
+3. Pin file `<project>/.umbel-bundle` (ordered candidate list):
+   - One candidate → run that bundle directly (no picker).
+   - `__vanilla__` sentinel (as the single candidate) → run plain claude, no flags, no picker.
+   - Multiple candidates → on TTY, open the scoped picker (restricted to those candidates, default pre-selected); on non-TTY, resolve to the default candidate (first listed).
+   - Absent / all-commented → unresolved (continue to step 4).
+4. No resolved candidate: on TTY, open the full picker with a `(vanilla)` row prepended
    to the bundle list. On non-TTY, silently fall through to vanilla.
 
 `--no-cache` forces a rebuild even if the hash matches.
@@ -372,18 +373,48 @@ The wrapper is the only umbel path that runs claude. There is no
 <project>/.umbel-bundle
 ```
 
-Plain text, one line. Three meaningful states:
+Plain text, one **candidate** per line. Example:
 
-| Content       | Meaning                                                       |
-|---------------|---------------------------------------------------------------|
-| `<bundle>`    | Run under this bundle.                                        |
-| `__vanilla__` | Run plain claude with no bundle, no picker.                   |
-| (absent/empty)| No pin → picker on TTY, silent vanilla on non-TTY.            |
+```text
+discovery        # primary: the bundle I use most here
+delivery         # also relevant on this repo
+# __vanilla__    # parked: uncomment to offer plain claude too
+```
 
-`umbel apply <name>` writes a bundle pin. `umbel apply --vanilla`
-writes the `__vanilla__` sentinel. `umbel unpin` removes the file
-entirely. The bundle-name regex (`^[a-z][a-z0-9-]{1,40}$`) rejects
-underscores so the sentinel cannot collide with a real bundle.
+**File grammar:**
+
+- Lines are trimmed; blank lines and full-line `# …` comments are skipped.
+- Inline trailing `name # …` comments are stripped (bundle names cannot
+  contain `#`, so this is unambiguous).
+- Duplicates are deduped; first occurrence wins.
+- A pin whose candidates are all commented out (or the file is empty/absent)
+  is equivalent to no pin — never an error.
+
+**Candidates and resolution:**
+
+| Pin content                      | Meaning                                                                         |
+|----------------------------------|---------------------------------------------------------------------------------|
+| One `<bundle>` line              | Resolves directly; no picker. Backward-compatible with existing single-line pins.     |
+| `__vanilla__` (as single line)   | Run plain claude with no bundle, no picker.                                     |
+| Multiple lines                   | Scoped picker on TTY (candidates only, default pre-selected); default candidate on non-TTY. |
+| Absent / all-commented           | No pin → full picker on TTY, silent vanilla on non-TTY.                         |
+
+**Default candidate:** the first listed candidate. It is pre-selected in the
+scoped picker and resolved automatically in non-interactive shells.
+
+**`__vanilla__` as a candidate in a multi-line pin:** renders a `(vanilla)` row
+in the scoped picker. There is no implicit vanilla row in the scoped picker —
+it only appears if `__vanilla__` is listed.
+
+**Candidates are not pre-built.** Each builds lazily on first pick or
+non-interactive resolution (the existing `building bundle 'X'…` notice).
+
+`umbel apply <name>` writes a single-candidate bundle pin. `umbel apply --vanilla`
+writes the `__vanilla__` sentinel. `umbel unpin` removes the file entirely.
+`umbel apply` refuses (exit 2, hint to run `umbel unpin` first) to overwrite an
+existing multi-candidate pin — multi-candidate pins are hand-authored. The
+bundle-name regex (`^[a-z][a-z0-9-]{1,40}$`) rejects underscores so the
+sentinel cannot collide with a real bundle.
 
 VCS treatment: not auto-managed. README documents the recommendation —
 **commit it** if the team wants a shared default; ignore it for per-developer
@@ -391,29 +422,54 @@ setups. umbel makes no edits to `.gitignore` and does not stage the file.
 
 ## Pickers
 
-Pickers fire when a no-arg subcommand is invoked on a TTY. Behavior on
-non-TTY varies by verb:
+Pickers fire when a no-arg subcommand is invoked on a TTY. There are two
+picker variants: the **full picker** and the **scoped picker**.
 
-- `run` falls through to vanilla (silent, no prompt).
+Behavior on non-TTY varies by verb:
+
+- `run` falls through to vanilla (no pin) or the default candidate (multi-candidate pin) — silent, no prompt.
 - `apply` / `show` / `build` error with a hint to pass `<name>` or pin.
 
-### `run` / `apply` / `unpin` / `show` / `build`
+### Full picker
 
-Single-select picker. For `run` and `apply`, a `(vanilla)` row is
-prepended to the bundle list. Row format:
+Used by `run` when nothing resolves (no pin, no arg, no `UMBEL_BUNDLE` env),
+and by `apply`, `show`, and `build` when invoked without an arg on a TTY. Shows every
+discovered bundle. For `run` and `apply`, a `(vanilla)` row is prepended. Row
+format:
 
 ```
   (vanilla)         Run claude with no bundle
   data-science      Tools for data science work     [user] [pinned]
   base              Universal baseline              [user]
-  ds-no-mcp         DS without DuckDB MCP           [project] [extends: data-science]
+  ds-no-mcp         DS without DuckDB MCP           [project] [shadowed]
 ```
 
-Pinned bundle (or vanilla pin) is pre-selected. The picker is purely
-ephemeral — selecting a bundle from `run` does **not** write a pin. To
-persist a default, run `umbel apply` (which uses the same picker but
-writes the pin on selection). `unpin` shows only the current pin (if
-any) for confirmation; absent pin → no-op.
+The current pin (or vanilla pin) is pre-selected. `show` and `build` use the
+full picker but pre-select the default candidate when a pin is present.
+
+### Scoped picker
+
+Used by `run` on a TTY when the pin has **more than one candidate**. Restricted
+to exactly the pin's candidates — no other bundles are shown. Row format mirrors
+the full picker; the default candidate (first listed in the pin) is pre-selected.
+A `(vanilla)` row appears only if `__vanilla__` is listed as a candidate in the
+pin.
+
+The scoped picker is purely **ephemeral** — selecting a candidate resolves the
+launch only and does **not** rewrite the pin. To persist a default, run
+`umbel apply` (which uses the full picker and writes a single-candidate pin on
+selection, after confirming any existing multi-candidate pin is removed).
+
+### `umbel list` and multi-candidate pins
+
+`umbel list` marks every candidate in the PINNED column (`yes`),
+distinguishing the default candidate (`yes*`) with a footnote.
+
+### `unpin`
+
+`unpin` removes the pin file immediately with no confirmation prompt. On success it
+prints `unpinned`; when no pin file exists it prints `no pin to remove` and exits 0
+(no-op).
 
 ## PATH shim
 

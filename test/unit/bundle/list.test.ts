@@ -62,16 +62,36 @@ describe("renderList", () => {
     expect(out).toContain("base, lang-py");
   });
 
-  it("marks pinned bundle in PINNED column", () => {
+  it("marks a single pinned bundle with yes (no footnote)", () => {
     const entries = [
       entry({ name: "data-science", scope: "project" }),
       entry({ name: "base", scope: "user" }),
     ];
-    const out = renderList(entries, SCOPE_DIRS, { pinnedName: "data-science" });
+    const out = renderList(entries, SCOPE_DIRS, { pinnedNames: ["data-science"] });
     const dsLine = out.split("\n").find((l) => l.includes("data-science"))!;
     const baseLine = out.split("\n").find((l) => l.includes("base "))!;
     expect(dsLine).toMatch(/yes/);
     expect(baseLine).not.toMatch(/yes/);
+    expect(out).not.toContain("default candidate");
+  });
+
+  it("marks every candidate, distinguishing the default with yes* + a footnote", () => {
+    const entries = [
+      entry({ name: "discovery", scope: "project" }),
+      entry({ name: "delivery", scope: "project" }),
+      entry({ name: "other", scope: "user" }),
+    ];
+    const out = renderList(entries, SCOPE_DIRS, {
+      pinnedNames: ["discovery", "delivery"],
+      defaultName: "discovery",
+    });
+    const discoveryLine = out.split("\n").find((l) => l.includes("discovery"))!;
+    const deliveryLine = out.split("\n").find((l) => l.includes("delivery"))!;
+    const otherLine = out.split("\n").find((l) => l.includes("other"))!;
+    expect(discoveryLine).toMatch(/yes\*/);
+    expect(deliveryLine).toMatch(/yes(?!\*)/);
+    expect(otherLine).not.toMatch(/yes/);
+    expect(out).toMatch(/\* default candidate/);
   });
 
   it("omits a scope group entirely when it has no rows", () => {

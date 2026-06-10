@@ -78,4 +78,40 @@ describe("run() bundle apply", () => {
     expect(code).toBe(2);
     expect(stderr.join("")).toMatch(/name required/);
   });
+
+  function multiPin(): void {
+    writeFileSync(join(cwd, ".umbel-bundle"), "discovery\ndelivery\n");
+  }
+
+  it("apply <name> refuses to overwrite a multi-candidate pin (exit 2, hints unpin)", async () => {
+    bundleFile("demo");
+    multiPin();
+    const code = await run(["apply", "demo"], envWith({ NO_TTY: "1" }), cwd);
+    expect(code).toBe(2);
+    expect(stderr.join("")).toMatch(/unpin/);
+    expect(readFileSync(join(cwd, ".umbel-bundle"), "utf8")).toBe("discovery\ndelivery\n");
+  });
+
+  it("apply --vanilla refuses to overwrite a multi-candidate pin (exit 2)", async () => {
+    multiPin();
+    const code = await run(["apply", "--vanilla"], envWith({ NO_TTY: "1" }), cwd);
+    expect(code).toBe(2);
+    expect(stderr.join("")).toMatch(/unpin/);
+    expect(readFileSync(join(cwd, ".umbel-bundle"), "utf8")).toBe("discovery\ndelivery\n");
+  });
+
+  it("apply (no name, non-TTY) over a multi-candidate pin refuses with the guard, not the name-required error", async () => {
+    multiPin();
+    const code = await run(["apply"], envWith({ NO_TTY: "1" }), cwd);
+    expect(code).toBe(2);
+    expect(stderr.join("")).toMatch(/unpin/);
+  });
+
+  it("apply still overwrites a single-candidate pin", async () => {
+    bundleFile("demo");
+    writeFileSync(join(cwd, ".umbel-bundle"), "old\n");
+    const code = await run(["apply", "demo"], envWith({ NO_TTY: "1" }), cwd);
+    expect(code).toBe(0);
+    expect(readFileSync(join(cwd, ".umbel-bundle"), "utf8")).toBe("demo\n");
+  });
 });

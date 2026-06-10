@@ -187,9 +187,19 @@ umbel skills [options]                  # low-level skill installer (v0 picker)
 ```
 
 When invoked without `[name]` on a TTY, `run` / `apply` / `show` / `build`
-open a single-select picker. For `run` and `apply` the picker prepends a
-`(vanilla)` row meaning "no bundle, plain claude." Pinned bundle (or
-vanilla pin) is pre-selected.
+open a picker — **full** or **scoped**, depending on the pin:
+
+- **Full picker** (no pin, or `run`/`apply`/`show`/`build` with no arg): every
+  discovered bundle, `(vanilla)` row prepended. On non-TTY, `run` falls through
+  to vanilla; the others error with a hint to pass `<name>` or pin.
+- **Scoped picker** (multi-candidate pin + `run`): exactly the pin's candidates,
+  default (first) pre-selected, `(vanilla)` row only if `__vanilla__` is listed
+  in the pin. Ephemeral — selecting a candidate does not rewrite the pin.
+  (this variant fires for `run` only; `apply`/`show`/`build` use the full picker)
+
+`show` and `build` always use the full picker but pre-select the default
+candidate when a pin is present. The current pin (or vanilla pin) is
+pre-selected in all picker contexts where it applies.
 
 ## PATH shim (recommended)
 
@@ -204,32 +214,65 @@ umbel shim install                       # writes ~/.local/share/umbel/bin/claud
 export PATH="$HOME/.local/share/umbel/bin:$PATH"
 ```
 
-After that, plain `claude` in a project with a `.umbel-bundle` pin runs
-under that bundle. In a project without a pin, the shim shows the picker
+After that, plain `claude` in a project with a single-candidate pin runs
+directly under that bundle. A multi-candidate pin opens the scoped picker
+so you choose which candidate to use for that launch — every launch, not
+just the first. In a project without a pin, the shim shows the full picker
 so you can choose a bundle for that session or pick `(vanilla)` to run
-plain claude. Non-interactive shells fall back to vanilla automatically.
+plain claude. Non-interactive shells fall back to vanilla automatically
+(or to the default candidate, if the pin has one).
 
 To opt out of all umbel routing for one invocation, call claude by its
 absolute path, or temporarily `unset PATH`'s shim entry.
 
 ## Pin file
 
-`<project>/.umbel-bundle` is plain text, one line:
+`<project>/.umbel-bundle` is plain text, one candidate per line:
 
-- a bundle name → run under that bundle;
-- `__vanilla__` → run plain claude with no bundle, no picker;
-- absent → picker on TTY, vanilla on non-TTY.
+```text
+discovery        # primary: the bundle I use most here
+delivery         # also relevant on this repo
+# __vanilla__    # parked: uncomment to offer plain claude too
+```
 
-`umbel apply <name>` writes a bundle pin. `umbel apply --vanilla` writes
-the vanilla pin. `umbel unpin` removes the file. Commit it to share a
-default with your team, or `.gitignore` it for per-developer setup.
+- **One candidate** → resolves directly and launches (backward-compatible with existing single-line pins).
+- **Many candidates** → scoped picker over just those candidates; the first is the default.
+- **`__vanilla__` line** → offers "plain claude" as an explicit candidate in the scoped picker.
+- **Absent / all-commented** → full picker on TTY, vanilla on non-TTY.
+
+**File grammar:** lines are trimmed; blank lines and full-line `# …` comments are
+skipped; inline trailing `name # …` comments are stripped (bundle names cannot
+contain `#`). Duplicates are deduped (first occurrence wins).
+
+**Default candidate:** the first listed candidate is pre-selected in the scoped
+picker and resolved automatically in non-interactive shells.
+
+**Visible behaviour shift:** a project with a multi-candidate pin opens an
+(ephemeral) scoped picker on every launch instead of resolving directly. The
+scoped picker never rewrites the pin — it resolves only the current launch.
+
+**Hand-authored:** multi-candidate pins are written by hand. `umbel apply`
+stays single-candidate and refuses (exit 2, hint to run `umbel unpin` first) to
+overwrite an existing multi-candidate pin.
+
+`umbel apply <name>` writes a single-candidate bundle pin. `umbel apply --vanilla`
+writes the `__vanilla__` sentinel. `umbel unpin` removes the file. Commit it to
+share a default with your team, or `.gitignore` it for per-developer setup.
+
+See [`docs/adr/0007-multi-candidate-pins.md`](docs/adr/0007-multi-candidate-pins.md)
+and [`CONTEXT.md`](CONTEXT.md) for rationale and terminology.
 
 ## Bundle resolution order for `run`
 
 1. Explicit `<name>` arg
 2. `UMBEL_BUNDLE` env var (set to `__vanilla__` to force vanilla)
-3. `<project>/.umbel-bundle` pin file (name or `__vanilla__`)
-4. On TTY → picker with `(vanilla)` row; on non-TTY → silent vanilla.
+3. `<project>/.umbel-bundle` pin file:
+   - one candidate → run that bundle directly
+   - `__vanilla__` sentinel → run plain claude
+   - multiple candidates → scoped picker on TTY; default candidate on non-TTY
+4. No pin (or all candidates commented out) → on TTY: full picker with `(vanilla)` row; on non-TTY: silent vanilla.
+
+Arg and env bypass the picker entirely and are not constrained to the pin's candidate list.
 
 ## Skills picker (low-level, v0)
 
