@@ -22,9 +22,11 @@ export function findClaudeAncestor(
 ): string | null {
   const stopAtGit = opts.stopAtGit ?? false;
   for (let dir = start; ; ) {
+    // `home` is an exclusive upper boundary: never match its `.claude`, which is
+    // the global Claude config dir (present on every machine), not a project root.
+    if (dir === home) return null;
     if (isDir(join(dir, ".claude"))) return dir;
     if (stopAtGit && existsSync(join(dir, ".git"))) return null;
-    if (dir === home) return null;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;
