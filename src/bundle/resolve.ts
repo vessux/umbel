@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { UsageError } from "../errors.ts";
+import { NotFoundError, UsageError } from "../errors.ts";
 import { isDir } from "../target/walk.ts";
 import type { ResolvedBundle } from "./compose.ts";
 import { ARTIFACT_KINDS, type ArtifactKind } from "./kinds.ts";
@@ -50,7 +50,7 @@ export function resolveSources(bundle: ResolvedBundle, opts: ResolveOpts): Resol
     );
   }
   if (missing.length > 0) {
-    throw new UsageError(`bundle '${bundle.name}': source(s) not found: ${missing.join(", ")}`);
+    throw new NotFoundError(`bundle '${bundle.name}': source(s) not found: ${missing.join(", ")}`);
   }
 
   if (opts.projectSkillsDir && isDir(opts.projectSkillsDir)) {

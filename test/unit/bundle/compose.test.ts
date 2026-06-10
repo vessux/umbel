@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compose } from "../../../src/bundle/compose.ts";
 import type { BundleManifest } from "../../../src/bundle/manifest.ts";
+import { CliError } from "../../../src/errors.ts";
 
 function m(name: string, partial: Partial<BundleManifest> = {}): BundleManifest {
   return { name, sourcePath: `/x/${name}.md`, body: "", ...partial };
@@ -8,6 +9,16 @@ function m(name: string, partial: Partial<BundleManifest> = {}): BundleManifest 
 
 function index(...mans: BundleManifest[]): Map<string, BundleManifest> {
   return new Map(mans.map((x) => [x.name, x]));
+}
+
+function thrown(fn: () => unknown): CliError {
+  try {
+    fn();
+  } catch (e) {
+    if (e instanceof CliError) return e;
+    throw e;
+  }
+  throw new Error("expected function to throw");
 }
 
 describe("compose", () => {
@@ -113,14 +124,27 @@ describe("compose", () => {
     expect(r.skills).toEqual(["g1", "p11", "p21"]);
   });
 
-  it("missing parent → error names the missing bundle and chain", () => {
-    const ix = index(m("child", { extends: ["ghost"] }));
-    expect(() => compose("child", ix)).toThrow(/ghost/);
+  it("unknown bundle name → not found (exit 3)", () => {
+    const err = thrown(() => compose("ghost", index(m("base"))));
+    expect(err.name).toBe("NotFoundError");
+    expect(err.exitCode).toBe(3);
+    expect(err.message).toMatch(/ghost.*not found/);
   });
 
-  it("cycle in extends → error", () => {
-    const ix = index(m("a", { extends: ["b"] }), m("b", { extends: ["a"] }));
-    expect(() => compose("a", ix)).toThrow(/cycle/i);
+  it("missing parent → not found (exit 3), names the missing bundle and chain", () => {
+    const err = thrown(() => compose("child", index(m("child", { extends: ["ghost"] }))));
+    expect(err.name).toBe("NotFoundError");
+    expect(err.exitCode).toBe(3);
+    expect(err.message).toMatch(/ghost/);
+  });
+
+  it("cycle in extends → usage error (exit 2), not not-found", () => {
+    const err = thrown(() =>
+      compose("a", index(m("a", { extends: ["b"] }), m("b", { extends: ["a"] }))),
+    );
+    expect(err.name).toBe("UsageError");
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/cycle/i);
   });
 });
 
