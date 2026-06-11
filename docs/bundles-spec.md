@@ -234,14 +234,22 @@ Shape:
 
 ```markdown
 ---
-# resolved frontmatter — composed, defaulted, no `extends:` field
 name: data-science
-description: Tools for data science work
-skills: [base-skill, pandas-cheatsheet]
-agents: [data-scientist]
-mcps: [local/duckdb]
-mergeMcp: false
-hash: abc123def456
+hash: 9f3c1a2b7e04
+description: Tools for data-science work
+skills:
+  - claude/base-skill
+  - cc-plugin-superpowers/pandas-cheatsheet
+agents:
+  - claude/data-scientist
+hooks:
+  - base/preflight
+mcps:
+  - local/duckdb
+settings:
+  model: claude-opus-4-8
+  env:
+    PYTHONHASHSEED: "0"
 ---
 
 [verbatim markdown body from the source bundle.md, if any]
@@ -250,12 +258,25 @@ hash: abc123def456
 
 \`\`\`bash
 claude \
-  --plugin-dir   /Users/.../.cache/umbel/bundles/data-science-abc123 \
-  --settings     /Users/.../.cache/umbel/bundles/data-science-abc123/settings.json \
-  --mcp-config   /Users/.../.cache/umbel/bundles/data-science-abc123/.mcp.json \
+  --plugin-dir /home/you/.cache/umbel/bundles/data-science-9f3c1a2b7e04 \
+  --settings /home/you/.cache/umbel/bundles/data-science-9f3c1a2b7e04/settings.json \
+  --mcp-config /home/you/.cache/umbel/bundles/data-science-9f3c1a2b7e04/.mcp.json \
   --strict-mcp-config
 \`\`\`
 ```
+
+This block is **verbatim `umbel build` output**: `yaml` serializes lists
+block-style (one `-` per line), and the frontmatter key order is fixed by the
+emitter:
+
+- **Key order:** `name`, `hash`, `description`, then any non-empty `skills`,
+  `agents`, `hooks`, `mcps` lists, then `mergeMcp` (only when the bundle sets
+  it), then `settings` (only when non-empty). Unset fields and empty lists are
+  omitted; the `extends:` field is composed away and never appears.
+- **Refs stay qualified** (`<source>/<leaf>`), exactly as written in the
+  manifest — never canonicalized to bare names. (The on-disk cache *directories*
+  use the canonical frontmatter `name:` — see above — but the `bundle.md` refs
+  do not.)
 
 Rules for the `## Invocation` block:
 
