@@ -44,12 +44,22 @@ export interface CompileOpts {
   onBuild?: () => void;
 }
 
+export interface CompileResult {
+  /** Absolute path to the finalized cache dir (`<cacheRoot>/bundles/<name>-<hash>`). */
+  cacheDir: string;
+  /** Bundle version (`0.0.0+<hash>`), identical to the cache's plugin.json `version`. */
+  version: string;
+}
+
 export function compile(
   bundle: ResolvedBundle,
   sources: ResolvedSources,
   opts: CompileOpts,
-): string {
+): CompileResult {
   const hash = hashBundle(bundle, sources);
+  // Single source for the version string: also written into plugin.json (see
+  // buildLayout) and returned here, so the env var and the file can't drift.
+  const version = `0.0.0+${hash}`;
   const finalDir = bundleCachePath(opts.cacheRoot, bundle.name, hash);
   const partial = partialPath(finalDir);
 
@@ -57,7 +67,7 @@ export function compile(
     // Cache hit: still refresh the by-name pointer so it tracks the most
     // recent build for this name (which is the one we were asked to produce).
     updateByNameSymlink(opts.cacheRoot, bundle.name, finalDir);
-    return finalDir;
+    return { cacheDir: finalDir, version };
   }
 
   opts.onBuild?.();
@@ -67,7 +77,7 @@ export function compile(
     rmSync(finalDir, { recursive: true, force: true });
   }
   ensureDir(dirname(finalDir));
-  buildLayout(bundle, sources, hash, partial, finalDir);
+  buildLayout(bundle, sources, version, partial, finalDir);
   // Write bundle.md into `partial` but embed `finalDir` in the Invocation
   // block, so consumers reading the cache after the atomic rename see the
   // real path, not the `.partial` staging name.
@@ -78,13 +88,13 @@ export function compile(
 
   gcBundles(opts.cacheRoot, bundle.name, opts.keepCache ?? 3);
 
-  return finalDir;
+  return { cacheDir: finalDir, version };
 }
 
 function buildLayout(
   bundle: ResolvedBundle,
   sources: ResolvedSources,
-  hash: string,
+  version: string,
   dir: string,
   finalDir: string,
 ): void {
@@ -95,7 +105,7 @@ function buildLayout(
   ensureDir(pluginDir);
   const plugin = {
     name: bundle.name,
-    version: `0.0.0+${hash}`,
+    version,
     description: bundle.description,
   };
   writeFileSync(join(pluginDir, "plugin.json"), JSON.stringify(plugin, null, 2));

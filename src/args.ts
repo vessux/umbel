@@ -36,6 +36,8 @@ Env:
   UMBEL_CACHE_DIR      Override compiled-bundle cache root (default: \$XDG_CACHE_HOME/umbel).
   UMBEL_BUNDLE         Used by 'run' name resolution (arg > env > pin). Set to "__vanilla__" to force vanilla.
   UMBEL_RESOLVED       Set automatically when 'umbel run' spawns claude; the shim short-circuits to vanilla if set.
+  UMBEL_RESOLVED_DIR   Set by 'umbel run' on the bundle path: the resolved bundle's cache dir (for downstream tools).
+  UMBEL_BUNDLE_VERSION Set by 'umbel run' on the bundle path: the running bundle's version (0.0.0+<hash>).
   NO_COLOR             Disable ANSI color (icons retained).
 
 Examples:

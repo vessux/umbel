@@ -382,7 +382,7 @@ function buildBundle(
   forceRebuild = false,
 ): string {
   const { resolved, sources } = resolveBundle(name, index, env);
-  return compile(resolved, sources, { cacheRoot: bundleCacheRoot(env), forceRebuild });
+  return compile(resolved, sources, { cacheRoot: bundleCacheRoot(env), forceRebuild }).cacheDir;
 }
 
 function runBundleUnpin(cwd: string): number {
