@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs } from "../../src/args.ts";
+import { helpText, parseArgs } from "../../src/args.ts";
 import { UsageError } from "../../src/errors.ts";
 
 const CWD = "/tmp/cwd";
@@ -78,5 +78,13 @@ describe("parseArgs", () => {
   it("--help / -h set help flag", () => {
     expect(parseArgs(["-h"], { cwd: CWD, env: EMPTY_ENV }).help).toBe(true);
     expect(parseArgs(["--help"], { cwd: CWD, env: EMPTY_ENV }).help).toBe(true);
+  });
+});
+
+describe("helpText", () => {
+  it("documents the run-exported env vars in the Env section", () => {
+    const help = helpText();
+    expect(help).toContain("UMBEL_RESOLVED_DIR");
+    expect(help).toContain("UMBEL_BUNDLE_VERSION");
   });
 });

@@ -44,7 +44,7 @@ describe("compile", () => {
   }
 
   it("creates a cache dir with .claude-plugin/plugin.json", () => {
-    const dir = compile(bundle({ name: "demo" }), emptySources(), { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ name: "demo" }), emptySources(), { cacheRoot });
     expect(dir).toMatch(/[/]demo-[0-9a-f]{12}$/);
     expect(statSync(dir).isDirectory()).toBe(true);
     const plugin = JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"));
@@ -60,7 +60,7 @@ describe("compile", () => {
       skills: new Map([["tdd", tdd]]),
       agents: new Map([["scout", scout]]),
     };
-    const dir = compile(bundle({ skills: ["tdd"], agents: ["scout"] }), sources, {
+    const { cacheDir: dir } = compile(bundle({ skills: ["tdd"], agents: ["scout"] }), sources, {
       cacheRoot,
     });
     expect(readlinkSync(join(dir, "skills", "tdd"))).toBe(tdd);
@@ -80,7 +80,9 @@ describe("compile", () => {
       ...emptySources(),
       skills: new Map([["plannotator/annotate", dir1]]),
     };
-    const dir = compile(bundle({ skills: ["plannotator/annotate"] }), sources, { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ skills: ["plannotator/annotate"] }), sources, {
+      cacheRoot,
+    });
     // Cache dir = frontmatter `name:` so CC identifies the skill correctly.
     expect(readlinkSync(join(dir, "skills", "plannotator-annotate"))).toBe(dir1);
     // The source-side leaf does NOT appear in the cache.
@@ -135,9 +137,13 @@ describe("compile", () => {
         ["superpowers/tdd", bPath],
       ]),
     };
-    const dir = compile(bundle({ skills: ["pocock/tdd", "superpowers/tdd"] }), sources, {
-      cacheRoot,
-    });
+    const { cacheDir: dir } = compile(
+      bundle({ skills: ["pocock/tdd", "superpowers/tdd"] }),
+      sources,
+      {
+        cacheRoot,
+      },
+    );
     // No bare `tdd/` — both colliding entries get source-prefixed.
     expect(existsSync(join(dir, "skills", "tdd"))).toBe(false);
     // Each colliding entry exists under its prefixed name.
@@ -172,9 +178,13 @@ describe("compile", () => {
         ["pocock/caveman", b],
       ]),
     };
-    const dir = compile(bundle({ skills: ["pocock/tdd", "pocock/caveman"] }), sources, {
-      cacheRoot,
-    });
+    const { cacheDir: dir } = compile(
+      bundle({ skills: ["pocock/tdd", "pocock/caveman"] }),
+      sources,
+      {
+        cacheRoot,
+      },
+    );
     // Bare canonical names — both symlinks (no prefix, no copy).
     expect(readlinkSync(join(dir, "skills", "tdd"))).toBe(a);
     expect(readlinkSync(join(dir, "skills", "caveman"))).toBe(b);
@@ -192,7 +202,7 @@ describe("compile", () => {
       ...emptySources(),
       mcps: new Map([["local/duckdb", mcpDir]]),
     };
-    const dir = compile(bundle({ mcps: ["local/duckdb"] }), sources, { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ mcps: ["local/duckdb"] }), sources, { cacheRoot });
     const mcp = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
     // Absolute cache path, NOT ${CLAUDE_PLUGIN_ROOT}: .mcp.json loads via
     // --mcp-config, where CC does not substitute the plugin-root variable.
@@ -210,7 +220,7 @@ describe("compile", () => {
       ...emptySources(),
       mcps: new Map([["vendor/plain", mcpDir]]),
     };
-    const dir = compile(bundle({ mcps: ["vendor/plain"] }), sources, { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ mcps: ["vendor/plain"] }), sources, { cacheRoot });
     const mcp = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
     // No frontmatter `name:` — leaf used as canonical.
     expect(mcp.mcpServers.plain.command).toBe("some-bin");
@@ -230,7 +240,9 @@ describe("compile", () => {
         ["anthropic/pg", b],
       ]),
     };
-    const dir = compile(bundle({ mcps: ["local/pg", "anthropic/pg"] }), sources, { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ mcps: ["local/pg", "anthropic/pg"] }), sources, {
+      cacheRoot,
+    });
     const mcp = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
     expect(Object.keys(mcp.mcpServers).sort()).toEqual(["anthropic-pg", "local-pg"]);
     expect(existsSync(join(dir, "mcps", "local-pg", "MCP.md"))).toBe(true);
@@ -253,7 +265,7 @@ describe("compile", () => {
   });
 
   it("does not emit .mcp.json when no mcps declared", () => {
-    const dir = compile(bundle({}), emptySources(), { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({}), emptySources(), { cacheRoot });
     expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
   });
 
@@ -270,7 +282,7 @@ describe("compile", () => {
       ...emptySources(),
       hooks: new Map([["base/preflight", hookDir]]),
     };
-    const dir = compile(
+    const { cacheDir: dir } = compile(
       bundle({
         settings: { model: "claude-opus-4-7", env: { FOO: "bar" } },
         hooks: ["base/preflight"],
@@ -307,21 +319,21 @@ describe("compile", () => {
       ...emptySources(),
       hooks: new Map([["base/only", hookDir]]),
     };
-    const dir = compile(bundle({ hooks: ["base/only"] }), sources, { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ hooks: ["base/only"] }), sources, { cacheRoot });
     expect(() => readFileSync(join(dir, "settings.json"))).toThrow();
     const h = JSON.parse(readFileSync(join(dir, "hooks", "hooks.json"), "utf8"));
     expect(h.hooks.SessionStart[0].hooks[0].command).toBe("${CLAUDE_PLUGIN_ROOT}/hooks/only/s.sh");
   });
 
   it("does not write settings.json when no settings/hooks", () => {
-    const dir = compile(bundle({}), emptySources(), { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({}), emptySources(), { cacheRoot });
     expect(() => readFileSync(join(dir, "settings.json"))).toThrow();
   });
 
   it("idempotent: second compile of same input reuses dir", () => {
-    const a = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
+    const { cacheDir: a } = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
     const aMtime = statSync(a).mtimeMs;
-    const b = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
+    const { cacheDir: b } = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
     expect(b).toBe(a);
     expect(statSync(b).mtimeMs).toBe(aMtime);
   });
@@ -346,10 +358,13 @@ describe("compile", () => {
   });
 
   it("forceRebuild: replaces existing cache dir", () => {
-    const a = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
+    const { cacheDir: a } = compile(bundle({ name: "x" }), emptySources(), { cacheRoot });
     // Mark with custom file to detect replacement
     writeFileSync(join(a, "marker"), "old");
-    const b = compile(bundle({ name: "x" }), emptySources(), { cacheRoot, forceRebuild: true });
+    const { cacheDir: b } = compile(bundle({ name: "x" }), emptySources(), {
+      cacheRoot,
+      forceRebuild: true,
+    });
     expect(b).toBe(a);
     expect(() => readFileSync(join(b, "marker"))).toThrow();
   });
@@ -360,7 +375,7 @@ describe("compile", () => {
     const finalDir = join(cacheRoot, "bundles", `demo-${hash}`);
     mkdirSync(`${finalDir}.partial`, { recursive: true });
     writeFileSync(join(`${finalDir}.partial`, "junk"), "x");
-    const dir = compile(bundle({ name: "demo" }), emptySources(), { cacheRoot });
+    const { cacheDir: dir } = compile(bundle({ name: "demo" }), emptySources(), { cacheRoot });
     // Compile produced the real hash dir; the .partial sibling should be gone.
     expect(existsSync(`${dir}.partial`)).toBe(false);
   });
@@ -371,7 +386,7 @@ describe("compile", () => {
       ...emptySources(),
       skills: new Map([["tdd", tdd]]),
     };
-    const work = () => compile(bundle({ skills: ["tdd"] }), sources, { cacheRoot });
+    const work = () => compile(bundle({ skills: ["tdd"] }), sources, { cacheRoot }).cacheDir;
     const [a, b] = await Promise.all([Promise.resolve(work()), Promise.resolve(work())]);
     expect(a).toBe(b);
     expect(statSync(a).isDirectory()).toBe(true);
@@ -379,10 +394,11 @@ describe("compile", () => {
 
   it("GC keeps only the newest 3 cache dirs per name (default)", () => {
     // Compile 5 distinct variants; expect only 3 to remain.
-    const variants = [1, 2, 3, 4, 5].map((i) =>
-      compile(bundle({ name: "gc-test", description: `v${i}` }), emptySources(), {
-        cacheRoot,
-      }),
+    const variants = [1, 2, 3, 4, 5].map(
+      (i) =>
+        compile(bundle({ name: "gc-test", description: `v${i}` }), emptySources(), {
+          cacheRoot,
+        }).cacheDir,
     );
     const remaining = variants.filter((p) => existsSync(p));
     expect(remaining.length).toBe(3);
@@ -390,9 +406,13 @@ describe("compile", () => {
 
   describe("bundle.md", () => {
     it("writes a self-describing bundle.md with frontmatter + invocation", () => {
-      const dir = compile(bundle({ name: "doc-demo", description: "tester" }), emptySources(), {
-        cacheRoot,
-      });
+      const { cacheDir: dir } = compile(
+        bundle({ name: "doc-demo", description: "tester" }),
+        emptySources(),
+        {
+          cacheRoot,
+        },
+      );
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
       expect(md).toMatch(/^---\n/);
       expect(md).toMatch(/\nname: doc-demo\n/);
@@ -413,7 +433,7 @@ describe("compile", () => {
         ...emptySources(),
         hooks: new Map([["base/h", hookDir]]),
       };
-      const dir = compile(bundle({ hooks: ["base/h"] }), sources, { cacheRoot });
+      const { cacheDir: dir } = compile(bundle({ hooks: ["base/h"] }), sources, { cacheRoot });
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
       expect(md).not.toContain("--settings");
       // Hook is compiled into the plugin's hooks/hooks.json instead.
@@ -428,7 +448,7 @@ describe("compile", () => {
         ...emptySources(),
         mcps: new Map([["local/x", mcpDir]]),
       };
-      const dir = compile(bundle({ mcps: ["local/x"] }), sources, { cacheRoot });
+      const { cacheDir: dir } = compile(bundle({ mcps: ["local/x"] }), sources, { cacheRoot });
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
       expect(md).toContain("--mcp-config");
       expect(md).toContain("--strict-mcp-config");
@@ -442,14 +462,16 @@ describe("compile", () => {
         ...emptySources(),
         mcps: new Map([["local/y", mcpDir]]),
       };
-      const dir = compile(bundle({ mcps: ["local/y"], mergeMcp: true }), sources, { cacheRoot });
+      const { cacheDir: dir } = compile(bundle({ mcps: ["local/y"], mergeMcp: true }), sources, {
+        cacheRoot,
+      });
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
       expect(md).toContain("--mcp-config");
       expect(md).not.toContain("--strict-mcp-config");
     });
 
     it("includes verbatim body from the source bundle.md", () => {
-      const dir = compile(
+      const { cacheDir: dir } = compile(
         bundle({ body: "# Heading\n\nSome notes about the bundle." }),
         emptySources(),
         { cacheRoot },
@@ -461,7 +483,9 @@ describe("compile", () => {
 
     it("frontmatter omits the `extends:` field (already resolved)", () => {
       // ResolvedBundle type drops extends already; this is a contract reminder.
-      const dir = compile(bundle({ name: "no-extends" }), emptySources(), { cacheRoot });
+      const { cacheDir: dir } = compile(bundle({ name: "no-extends" }), emptySources(), {
+        cacheRoot,
+      });
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
       expect(md).not.toMatch(/\nextends:/);
     });
@@ -469,7 +493,9 @@ describe("compile", () => {
     it("Invocation block embeds the final path, not the `.partial` staging name", () => {
       // Regression: bk-2026-05-19T08:55:00Z. writeBundleMd used to render
       // the partial dir path which then survived the atomic rename.
-      const dir = compile(bundle({ name: "partial-check" }), emptySources(), { cacheRoot });
+      const { cacheDir: dir } = compile(bundle({ name: "partial-check" }), emptySources(), {
+        cacheRoot,
+      });
       const md = readFileSync(join(dir, "bundle.md"), "utf8");
       expect(md).not.toMatch(/\.partial/);
       expect(md).toMatch(new RegExp(`--plugin-dir ${dir.replace(/\//g, "\\/")}`));
@@ -478,7 +504,7 @@ describe("compile", () => {
 
   describe("by-name symlink", () => {
     it("creates bundles/by-name/<name> pointing at the new hash dir", () => {
-      const dir = compile(bundle({ name: "ln-demo" }), emptySources(), { cacheRoot });
+      const { cacheDir: dir } = compile(bundle({ name: "ln-demo" }), emptySources(), { cacheRoot });
       const link = join(cacheRoot, "bundles", "by-name", "ln-demo");
       expect(lstatSync(link).isSymbolicLink()).toBe(true);
       // relative target = "../<hashdir-basename>"
@@ -487,24 +513,40 @@ describe("compile", () => {
     });
 
     it("re-points the symlink atomically on subsequent build of a different variant", () => {
-      const a = compile(bundle({ name: "ln-bump", description: "v1" }), emptySources(), {
-        cacheRoot,
-      });
-      const b = compile(bundle({ name: "ln-bump", description: "v2" }), emptySources(), {
-        cacheRoot,
-      });
+      const { cacheDir: a } = compile(
+        bundle({ name: "ln-bump", description: "v1" }),
+        emptySources(),
+        {
+          cacheRoot,
+        },
+      );
+      const { cacheDir: b } = compile(
+        bundle({ name: "ln-bump", description: "v2" }),
+        emptySources(),
+        {
+          cacheRoot,
+        },
+      );
       expect(a).not.toBe(b);
       const link = join(cacheRoot, "bundles", "by-name", "ln-bump");
       expect(readlinkSync(link)).toBe(`../${pathBasename(b)}`);
     });
 
     it("refreshes the symlink on cache hit too (so apply tracks intent)", () => {
-      const a = compile(bundle({ name: "ln-hit", description: "v1" }), emptySources(), {
-        cacheRoot,
-      });
-      const b = compile(bundle({ name: "ln-hit", description: "v2" }), emptySources(), {
-        cacheRoot,
-      });
+      const { cacheDir: a } = compile(
+        bundle({ name: "ln-hit", description: "v1" }),
+        emptySources(),
+        {
+          cacheRoot,
+        },
+      );
+      const { cacheDir: b } = compile(
+        bundle({ name: "ln-hit", description: "v2" }),
+        emptySources(),
+        {
+          cacheRoot,
+        },
+      );
       // Re-compile v1 — same hash as a, cache hit. Symlink must move back to a.
       compile(bundle({ name: "ln-hit", description: "v1" }), emptySources(), {
         cacheRoot,
@@ -519,18 +561,26 @@ describe("compile", () => {
   describe("GC preserves by-name target", () => {
     it("keeps the hash dir pointed-to by by-name even when ranked below keep=N", () => {
       // Build 3 distinct variants with keep=3 so all survive.
-      const v1 = compile(bundle({ name: "keepy", description: "v1" }), emptySources(), {
-        cacheRoot,
-        keepCache: 3,
-      });
+      const { cacheDir: v1 } = compile(
+        bundle({ name: "keepy", description: "v1" }),
+        emptySources(),
+        {
+          cacheRoot,
+          keepCache: 3,
+        },
+      );
       compile(bundle({ name: "keepy", description: "v2" }), emptySources(), {
         cacheRoot,
         keepCache: 3,
       });
-      const v3 = compile(bundle({ name: "keepy", description: "v3" }), emptySources(), {
-        cacheRoot,
-        keepCache: 3,
-      });
+      const { cacheDir: v3 } = compile(
+        bundle({ name: "keepy", description: "v3" }),
+        emptySources(),
+        {
+          cacheRoot,
+          keepCache: 3,
+        },
+      );
       // Re-point symlink at v1 (the oldest by mtime).
       const link = join(cacheRoot, "bundles", "by-name", "keepy");
       unlinkSync(link);
@@ -543,14 +593,22 @@ describe("compile", () => {
     });
 
     it("does nothing special when the symlink is absent", () => {
-      const v1 = compile(bundle({ name: "noln", description: "v1" }), emptySources(), {
-        cacheRoot,
-        keepCache: 3,
-      });
-      const v2 = compile(bundle({ name: "noln", description: "v2" }), emptySources(), {
-        cacheRoot,
-        keepCache: 3,
-      });
+      const { cacheDir: v1 } = compile(
+        bundle({ name: "noln", description: "v1" }),
+        emptySources(),
+        {
+          cacheRoot,
+          keepCache: 3,
+        },
+      );
+      const { cacheDir: v2 } = compile(
+        bundle({ name: "noln", description: "v2" }),
+        emptySources(),
+        {
+          cacheRoot,
+          keepCache: 3,
+        },
+      );
       // Delete the symlink, then GC with keep=1 — v1 should be dropped (no protection).
       unlinkSync(join(cacheRoot, "bundles", "by-name", "noln"));
       gcBundles(cacheRoot, "noln", 1);

@@ -115,7 +115,7 @@ export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
   const { name, claudeArgs, env, cwd } = opts;
   const index = opts.preloadedIndex ?? loadBundleIndex(env, cwd);
   const { resolved, sources } = resolveBundle(name, index, env);
-  const cacheDir = compile(resolved, sources, {
+  const { cacheDir, version } = compile(resolved, sources, {
     cacheRoot: bundleCacheRoot(env),
     ...(opts.onBuild ? { onBuild: opts.onBuild } : {}),
   });
@@ -123,6 +123,8 @@ export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
     ...env,
     UMBEL_BUNDLE: name,
     UMBEL_RESOLVED: "1",
+    UMBEL_RESOLVED_DIR: cacheDir,
+    UMBEL_BUNDLE_VERSION: version,
   };
   const filteredPath = stripFromPath(env.PATH, shimDir(env));
   if (filteredPath !== undefined) spawnEnv.PATH = filteredPath;

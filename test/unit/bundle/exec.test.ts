@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prepareBundleInvocation, resolveBundleName } from "../../../src/bundle/exec.ts";
@@ -64,6 +64,23 @@ describe("prepareBundleInvocation", () => {
       cwd,
     });
     expect(inv.env.UMBEL_BUNDLE).toBe("demo");
+  });
+
+  it("injects UMBEL_RESOLVED_DIR (the cache dir) and UMBEL_BUNDLE_VERSION (matching the compiled plugin.json version)", () => {
+    bundleFile("demo", "---\nname: demo\n---\n");
+    const inv = prepareBundleInvocation({
+      name: "demo",
+      claudeArgs: [],
+      env: envWith(),
+      cwd,
+    });
+    expect(inv.env.UMBEL_RESOLVED_DIR).toBe(inv.cacheDir);
+    expect(inv.env.UMBEL_BUNDLE_VERSION).toMatch(/^0\.0\.0\+[0-9a-f]{12}$/);
+    // Must equal the value the compiler wrote — sourced, never re-derived, so the two can't drift.
+    const plugin = JSON.parse(
+      readFileSync(join(inv.cacheDir, ".claude-plugin", "plugin.json"), "utf8"),
+    ) as { version: string };
+    expect(inv.env.UMBEL_BUNDLE_VERSION).toBe(plugin.version);
   });
 
   it("forwards trailing claudeArgs verbatim after the bundle flags", () => {
