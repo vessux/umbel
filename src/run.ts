@@ -438,9 +438,9 @@ async function runBundleShow(rest: string[], env: NodeJS.ProcessEnv, cwd: string
     if (typeof picked === "number") return picked;
     name = picked;
   }
-  const { resolved, sources } = resolveBundle(name, index, env);
+  const { resolved, sources, warnings } = resolveBundle(name, index, env);
   const projectMcpPath = join(cwd, ".mcp.json");
-  process.stdout.write(renderShow(resolved, sources, { projectMcpPath }));
+  process.stdout.write(renderShow(resolved, sources, { projectMcpPath, warnings }));
   return 0;
 }
 
