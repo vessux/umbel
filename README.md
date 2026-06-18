@@ -175,7 +175,7 @@ the project-vs-bundle MCP diff.
 umbel list                              # scope-grouped bundle table
 umbel show [name]                       # resolved manifest + sources + MCP diff
 umbel build [name] [--no-cache]         # warm cache, print path
-umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle (--vanilla = pin "no bundle")
+umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cache (--vanilla = pin "no bundle")
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel init                              # multi-step authoring wizard
@@ -185,6 +185,12 @@ umbel shim uninstall                    # remove the shim
 umbel shim path                         # print the shim's absolute path
 umbel skills [options]                  # low-level skill installer (v0 picker)
 ```
+
+`apply` also **builds** the chosen bundle as a side effect: it warms the
+cache and atomically updates the `by-name/<name>` symlink, then prints a
+`built <path>` line beside the `pinned …` line, so a subsequent plain
+`umbel run` launches without a rebuild. (`apply --vanilla` only writes the
+pin — it builds nothing.)
 
 When invoked without `[name]` on a TTY, `run` / `apply` / `show` / `build`
 open a picker — **full** or **scoped**, depending on the pin:

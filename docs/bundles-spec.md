@@ -409,8 +409,11 @@ it only appears if `__vanilla__` is listed.
 **Candidates are not pre-built.** Each builds lazily on first pick or
 non-interactive resolution (the existing `building bundle 'X'…` notice).
 
-`umbel apply <name>` writes a single-candidate bundle pin. `umbel apply --vanilla`
-writes the `__vanilla__` sentinel. `umbel unpin` removes the file entirely.
+`umbel apply <name>` builds the bundle — warming the cache and atomically
+updating the `by-name/<name>` symlink, and printing a `built <path>` line
+beside the `pinned …` line — then writes a single-candidate bundle pin.
+`umbel apply --vanilla` writes the `__vanilla__` sentinel (no build).
+`umbel unpin` removes the file entirely.
 `umbel apply` refuses (exit 2, hint to run `umbel unpin` first) to overwrite an
 existing multi-candidate pin — multi-candidate pins are hand-authored. The
 bundle-name regex (`^[a-z][a-z0-9-]{1,40}$`) rejects underscores so the
@@ -658,7 +661,7 @@ project's own `.mcp.json` is additive rather than hidden.
 
 ```
 umbel run    [<name>] [--no-cache] [-- ...args]   # exec claude
-umbel apply  [<name>] [--vanilla]                 # write pin (--vanilla = pin "no bundle")
+umbel apply  [<name>] [--vanilla]                 # build + write pin (--vanilla = pin "no bundle", no build)
 umbel unpin                                       # remove pin
 umbel list                                        # table
 umbel show   [<name>]                             # resolved view
