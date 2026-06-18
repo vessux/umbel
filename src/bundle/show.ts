@@ -7,6 +7,7 @@ import type { ResolvedSources } from "./resolve.ts";
 
 export interface ShowOpts {
   projectMcpPath?: string;
+  warnings?: string[];
 }
 
 export function renderShow(
@@ -25,9 +26,10 @@ export function renderShow(
   sections.push("## mcp");
   sections.push(formatMcpDiff(bundle, sources, opts));
 
-  if (sources.warnings.length > 0) {
+  const warnings = [...new Set([...sources.warnings, ...(opts.warnings ?? [])])];
+  if (warnings.length > 0) {
     sections.push("## warnings");
-    sections.push(sources.warnings.map((w) => `- ${w}`).join("\n"));
+    sections.push(warnings.map((w) => `- ${w}`).join("\n"));
   }
 
   return `${sections.join("\n\n")}\n`;

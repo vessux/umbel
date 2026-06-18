@@ -78,4 +78,30 @@ describe("discoverBundles", () => {
     const out = discoverBundles({ userDir, projectDir });
     expect(out.map((e) => e.name)).toEqual(["ok"]);
   });
+
+  it("preserves the validation error on a malformed entry", () => {
+    mkdirSync(userDir, { recursive: true });
+    writeFileSync(join(userDir, "bad.md"), "---\nname: bad\nsettings:\n  notAllowed: 1\n---\n");
+    const out = discoverBundles({ userDir, projectDir });
+    const bad = out.find((e) => e.name === "bad");
+    expect(bad?.malformed).toBe(true);
+    expect(bad?.error).toMatch(/not in the whitelist/);
+    expect(bad?.manifest).toBeUndefined();
+  });
+
+  it("preserves unknown-field warnings on a healthy entry", () => {
+    mkdirSync(userDir, { recursive: true });
+    writeFileSync(join(userDir, "warn.md"), "---\nname: warn\nbogusKey: 1\n---\nbody\n");
+    const out = discoverBundles({ userDir, projectDir });
+    const warn = out.find((e) => e.name === "warn");
+    expect(warn?.malformed).toBe(false);
+    expect(warn?.warnings?.some((w) => w.includes("bogusKey"))).toBe(true);
+  });
+
+  it("a clean entry has neither error nor warnings", () => {
+    writeBundleFile(userDir, "clean");
+    const clean = discoverBundles({ userDir, projectDir }).find((e) => e.name === "clean");
+    expect(clean?.error).toBeUndefined();
+    expect(clean?.warnings).toBeUndefined();
+  });
 });

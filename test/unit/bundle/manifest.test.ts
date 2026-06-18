@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadManifest } from "../../../src/bundle/manifest.ts";
+import { UsageError } from "../../../src/errors.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 describe("loadManifest", () => {
@@ -209,5 +210,17 @@ plugins: [foo]
     expect(warnings).toHaveLength(2);
     expect(warnings.join("\n")).toMatch(/totallyMadeUp/);
     expect(warnings.join("\n")).toMatch(/plugins/);
+  });
+
+  it("wraps a frontmatter parse error as an actionable UsageError, not a raw YAMLException", () => {
+    const path = writeBundle("broken", "---\nname: ok\ndescription: this: breaks\n---\nbody\n");
+    let caught: unknown;
+    try {
+      loadManifest(path);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UsageError);
+    expect((caught as Error).message).toMatch(/description: >-|block scalar/);
   });
 });

@@ -11,6 +11,8 @@ export interface BundleEntry {
   path: string;
   manifest?: BundleManifest;
   malformed: boolean;
+  error?: string;
+  warnings?: string[];
   shadowed: boolean;
 }
 
@@ -43,10 +45,15 @@ function scanScope(dir: string, scope: BundleScope): BundleEntry[] {
     const name = file.slice(0, -3);
     let manifest: BundleManifest | undefined;
     let malformed = false;
+    let error: string | undefined;
+    let warnings: string[] | undefined;
     try {
-      manifest = loadManifest(path).manifest;
-    } catch {
+      const result = loadManifest(path);
+      manifest = result.manifest;
+      warnings = result.warnings;
+    } catch (e) {
       malformed = true;
+      error = e instanceof Error ? e.message : String(e);
     }
     out.push({
       name: manifest?.name ?? name,
@@ -54,6 +61,8 @@ function scanScope(dir: string, scope: BundleScope): BundleEntry[] {
       path,
       ...(manifest !== undefined ? { manifest } : {}),
       malformed,
+      ...(error !== undefined ? { error } : {}),
+      ...(warnings !== undefined && warnings.length > 0 ? { warnings } : {}),
       shadowed: false,
     });
   }

@@ -136,4 +136,19 @@ describe("renderShow", () => {
     expect(out).toMatch(/warnings/i);
     expect(out).toContain("- bundle 'x'");
   });
+
+  it("includes manifest-level warnings in the ## warnings section", () => {
+    const out = renderShow(bundle({ name: "demo" }), emptySources(), {
+      warnings: ["bundle /x/demo.md: unknown field 'bogusKey' (ignored)"],
+    });
+    expect(out).toContain("## warnings");
+    expect(out).toContain("unknown field 'bogusKey'");
+  });
+
+  it("de-duplicates warnings shared between sources and manifest", () => {
+    const sources = emptySources();
+    sources.warnings = ["dup warning"];
+    const out = renderShow(bundle({ name: "demo" }), sources, { warnings: ["dup warning"] });
+    expect(out.match(/dup warning/g)?.length).toBe(1);
+  });
 });
