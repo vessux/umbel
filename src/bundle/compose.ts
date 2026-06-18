@@ -19,6 +19,10 @@ export function compose(name: string, index: Map<string, BundleManifest>): Resol
   return merged!;
 }
 
+export function composeChain(name: string, index: Map<string, BundleManifest>): string[] {
+  return linearize(name, index);
+}
+
 function stripExtends(b: BundleManifest): ResolvedBundle {
   const { extends: _e, ...rest } = b;
   return rest;

@@ -149,3 +149,15 @@ describe("compose", () => {
 });
 
 import type { ResolvedBundle } from "../../../src/bundle/compose.ts";
+import { composeChain } from "../../../src/bundle/compose.ts";
+
+describe("composeChain", () => {
+  it("composeChain returns the linearized extends chain, ancestors first", () => {
+    const ix = new Map<string, BundleManifest>([
+      ["base", { name: "base", body: "", sourcePath: "base.md" }],
+      ["mid", { name: "mid", extends: ["base"], body: "", sourcePath: "mid.md" }],
+      ["leaf", { name: "leaf", extends: ["mid"], body: "", sourcePath: "leaf.md" }],
+    ]);
+    expect(composeChain("leaf", ix)).toEqual(["base", "mid", "leaf"]);
+  });
+});
