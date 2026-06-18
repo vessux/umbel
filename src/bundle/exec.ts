@@ -1,9 +1,9 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { NotFoundError } from "../errors.ts";
+import { NotFoundError, UsageError } from "../errors.ts";
 import { computeClaudeArgs } from "./claude-args.ts";
 import { compile } from "./compile.ts";
-import { type ResolvedBundle, compose } from "./compose.ts";
+import { type ResolvedBundle, compose, composeChain } from "./compose.ts";
 import { discoverBundles } from "./discover.ts";
 import {
   artifactRoots,
@@ -76,21 +76,33 @@ export function resolveBundle(
   name: string,
   index: BundleIndex,
   env: NodeJS.ProcessEnv,
-): { resolved: ResolvedBundle; sources: ResolvedSources } {
+): { resolved: ResolvedBundle; sources: ResolvedSources; warnings: string[] } {
   const ix = new Map<string, BundleManifest>();
   for (const e of index.entries) {
     if (e.manifest && !ix.has(e.name)) ix.set(e.name, e.manifest);
   }
   if (!ix.has(name)) {
+    const malformed = index.entries.find((e) => e.malformed && e.name === name);
+    if (malformed) {
+      throw new UsageError(malformed.error ?? `bundle '${name}' is malformed`);
+    }
     throw new NotFoundError(`bundle '${name}' not found`);
   }
   const resolved = compose(name, ix);
+  const chain = new Set(composeChain(name, ix));
+  const warnings = [
+    ...new Set(
+      index.entries
+        .filter((e) => !e.shadowed && chain.has(e.name))
+        .flatMap((e) => e.warnings ?? []),
+    ),
+  ];
   const projectSkillsDir = join(dirname(index.projectDir), "skills");
   const sources = resolveSources(resolved, {
     roots: artifactRoots(env),
     projectSkillsDir,
   });
-  return { resolved, sources };
+  return { resolved, sources, warnings };
 }
 
 export interface PrepareOpts {

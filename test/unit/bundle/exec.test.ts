@@ -1,8 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { prepareBundleInvocation, resolveBundleName } from "../../../src/bundle/exec.ts";
+import { discoverBundles } from "../../../src/bundle/discover.ts";
+import {
+  prepareBundleInvocation,
+  resolveBundle,
+  resolveBundleName,
+} from "../../../src/bundle/exec.ts";
 import { writePin } from "../../../src/bundle/pin.ts";
+import { NotFoundError, UsageError } from "../../../src/errors.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 describe("prepareBundleInvocation", () => {
@@ -227,5 +233,59 @@ describe("resolveBundleName", () => {
       name: "fromEnv",
       via: "env",
     });
+  });
+});
+
+describe("resolveBundle", () => {
+  let root: string;
+  let userDir: string;
+  let projectDir: string;
+
+  beforeEach(() => {
+    root = makeTmpDir("rb-");
+    userDir = join(root, "user");
+    projectDir = join(root, "project");
+    mkdirSync(userDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+  });
+  afterEach(() => cleanup(root));
+
+  function indexOf() {
+    return { userDir, projectDir, entries: discoverBundles({ userDir, projectDir }) };
+  }
+
+  it("surfaces a malformed bundle's error as UsageError (exit-2), not NotFoundError", () => {
+    writeFileSync(join(userDir, "bad.md"), "---\nname: bad\nsettings:\n  notAllowed: 1\n---\n");
+    let caught: unknown;
+    try {
+      resolveBundle("bad", indexOf(), { UMBEL_ARTIFACTS_DIR: root });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UsageError);
+    expect((caught as Error).message).toMatch(/not in the whitelist/);
+  });
+
+  it("reports a genuinely missing bundle as NotFoundError (exit-3)", () => {
+    expect(() => resolveBundle("ghost", indexOf(), { UMBEL_ARTIFACTS_DIR: root })).toThrow(
+      NotFoundError,
+    );
+  });
+
+  it("a healthy bundle shadowing a malformed same-named one resolves normally", () => {
+    writeFileSync(join(projectDir, "dup.md"), "---\nname: dup\n---\nbody\n");
+    writeFileSync(join(userDir, "dup.md"), "---\nname: dup\nsettings:\n  notAllowed: 1\n---\n");
+    expect(() => resolveBundle("dup", indexOf(), { UMBEL_ARTIFACTS_DIR: root })).not.toThrow();
+  });
+
+  it("aggregates unknown-field warnings across the extends chain", () => {
+    writeFileSync(join(userDir, "base.md"), "---\nname: base\nbogusBase: 1\n---\n");
+    writeFileSync(
+      join(userDir, "child.md"),
+      "---\nname: child\nextends: [base]\nbogusChild: 2\n---\n",
+    );
+    const { warnings } = resolveBundle("child", indexOf(), { UMBEL_ARTIFACTS_DIR: root });
+    expect(warnings.some((w) => w.includes("bogusBase"))).toBe(true);
+    expect(warnings.some((w) => w.includes("bogusChild"))).toBe(true);
   });
 });
