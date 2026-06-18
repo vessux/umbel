@@ -316,6 +316,7 @@ async function runBundleRun(rest: string[], env: NodeJS.ProcessEnv, cwd: string)
     // otherwise look like a freeze before claude's first output appears.
     onBuild: () => process.stderr.write(`building bundle '${resolvedName}'…\n`),
   });
+  for (const w of prepared.warnings) process.stderr.write(`${w}\n`);
   const result = spawnSync(prepared.command, prepared.args, {
     env: prepared.env as NodeJS.ProcessEnv,
     stdio: "inherit",
@@ -368,10 +369,11 @@ async function runBundleApply(
     name = picked.name;
   }
 
-  const built = buildBundle(name, index, env);
+  const { cacheDir, warnings } = buildBundle(name, index, env);
+  for (const w of warnings) process.stderr.write(`${w}\n`);
   const path = writePin(cwd, homedir(), name);
   process.stdout.write(`pinned bundle '${name}' at ${path}\n`);
-  process.stdout.write(`built ${built}\n`);
+  process.stdout.write(`built ${cacheDir}\n`);
   return 0;
 }
 
@@ -380,9 +382,13 @@ function buildBundle(
   index: BundleIndex,
   env: NodeJS.ProcessEnv,
   forceRebuild = false,
-): string {
-  const { resolved, sources } = resolveBundle(name, index, env);
-  return compile(resolved, sources, { cacheRoot: bundleCacheRoot(env), forceRebuild }).cacheDir;
+): { cacheDir: string; warnings: string[] } {
+  const { resolved, sources, warnings } = resolveBundle(name, index, env);
+  const { cacheDir } = compile(resolved, sources, {
+    cacheRoot: bundleCacheRoot(env),
+    forceRebuild,
+  });
+  return { cacheDir, warnings };
 }
 
 function runBundleUnpin(cwd: string): number {
@@ -425,8 +431,9 @@ async function runBundleBuild(
     if (typeof picked === "number") return picked;
     name = picked;
   }
-  const built = buildBundle(name, index, env, noCache);
-  process.stdout.write(`${built}\n`);
+  const { cacheDir, warnings } = buildBundle(name, index, env, noCache);
+  for (const w of warnings) process.stderr.write(`${w}\n`);
+  process.stdout.write(`${cacheDir}\n`);
   return 0;
 }
 

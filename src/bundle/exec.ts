@@ -121,12 +121,13 @@ export interface PreparedInvocation {
   args: string[];
   env: NodeJS.ProcessEnv;
   cacheDir: string;
+  warnings: string[];
 }
 
 export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
   const { name, claudeArgs, env, cwd } = opts;
   const index = opts.preloadedIndex ?? loadBundleIndex(env, cwd);
-  const { resolved, sources } = resolveBundle(name, index, env);
+  const { resolved, sources, warnings } = resolveBundle(name, index, env);
   const { cacheDir, version } = compile(resolved, sources, {
     cacheRoot: bundleCacheRoot(env),
     ...(opts.onBuild ? { onBuild: opts.onBuild } : {}),
@@ -145,5 +146,6 @@ export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
     args: [...computeClaudeArgs(resolved, cacheDir), ...claudeArgs],
     env: spawnEnv,
     cacheDir,
+    warnings,
   };
 }

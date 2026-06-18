@@ -134,6 +134,12 @@ describe("prepareBundleInvocation", () => {
     });
     expect(inv.args).not.toContain("--settings");
   });
+
+  it("carries the bundle's unknown-field warnings out on the invocation", () => {
+    bundleFile("warny", "---\nname: warny\nbogusKey: 1\n---\n");
+    const inv = prepareBundleInvocation({ name: "warny", claudeArgs: [], env: envWith(), cwd });
+    expect(inv.warnings.some((w) => w.includes("bogusKey"))).toBe(true);
+  });
 });
 
 describe("resolveBundleName", () => {
