@@ -63,11 +63,24 @@ export interface ManifestResult {
 
 const NAME_RE = /^[a-z][a-z0-9-]{1,40}$/;
 
+function parseFrontmatter(
+  path: string,
+  raw: string,
+): { data: Record<string, unknown>; body: string } {
+  try {
+    const parsed = matter(raw);
+    return { data: parsed.data as Record<string, unknown>, body: parsed.content };
+  } catch (e) {
+    const first = e instanceof Error ? e.message.split("\n", 1)[0] : String(e);
+    throw new UsageError(
+      `bundle ${path}: invalid YAML in frontmatter: ${first}\nHint: if a value contains \`{...}\`, \`[...]\`, or unquoted colons (e.g. code snippets in description), wrap it as a YAML block scalar:\n  description: >-\n    your text here`,
+    );
+  }
+}
+
 export function loadManifest(path: string): ManifestResult {
   const raw = readFileSync(path, "utf8");
-  const parsed = matter(raw);
-  const data = parsed.data as Record<string, unknown>;
-  const body = parsed.content;
+  const { data, body } = parseFrontmatter(path, raw);
 
   if (typeof data.name !== "string" || data.name.length === 0) {
     throw new UsageError(`bundle ${path}: 'name' is required`);
