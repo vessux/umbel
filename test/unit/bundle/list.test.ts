@@ -100,4 +100,24 @@ describe("renderList", () => {
     expect(out).not.toContain("PROJECT");
     expect(out).toContain("USER");
   });
+
+  it("marks a malformed bundle with a NAME marker and the reason in DESCRIPTION", () => {
+    const malformed: BundleEntry = {
+      name: "badsettings",
+      scope: "user",
+      path: "/x/badsettings.md",
+      malformed: true,
+      error:
+        "bundle /x/badsettings.md: settings.notAllowed is not in the whitelist (allowed: model)",
+      shadowed: false,
+    };
+    const out = renderList([malformed], SCOPE_DIRS);
+    expect(out).toContain("badsettings ⚠");
+    expect(out).toContain("settings.notAllowed is not in the whitelist");
+  });
+
+  it("leaves a healthy row's NAME unmarked", () => {
+    const out = renderList([entry({ name: "web-dev", scope: "user" })], SCOPE_DIRS);
+    expect(out).not.toContain("⚠");
+  });
 });

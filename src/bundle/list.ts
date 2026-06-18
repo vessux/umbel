@@ -49,12 +49,17 @@ function formatGroups(entries: BundleEntry[], dirs: ListScopeDirs, opts: RenderL
   return `${out.join("\n")}\n`;
 }
 
+function malformedReason(error: string | undefined): string {
+  if (!error) return "malformed";
+  return error.split("\n", 1)[0]!.replace(/^bundle .*?: /, "");
+}
+
 function formatTable(rows: BundleEntry[], opts: RenderListOpts): string[] {
   const headers = ["NAME", "DESCRIPTION", "EXTENDS", "PINNED"];
   const pinned = new Set(opts.pinnedNames ?? []);
   const data: string[][] = rows.map((r) => [
-    r.name,
-    r.manifest?.description ?? "—",
+    r.malformed ? `${r.name} ⚠` : r.name,
+    r.malformed ? malformedReason(r.error) : (r.manifest?.description ?? "—"),
     (r.manifest?.extends ?? []).join(", ") || "—",
     pinned.has(r.name) ? (r.name === opts.defaultName ? "yes*" : "yes") : "—",
   ]);
