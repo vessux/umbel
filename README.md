@@ -175,7 +175,7 @@ the project-vs-bundle MCP diff.
 umbel list                              # scope-grouped bundle table
 umbel show [name]                       # resolved manifest + sources + MCP diff
 umbel build [name] [--no-cache]         # warm cache, print path
-umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle (--vanilla = pin "no bundle")
+umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cache (--vanilla = pin "no bundle")
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel init                              # multi-step authoring wizard
@@ -255,7 +255,10 @@ scoped picker never rewrites the pin — it resolves only the current launch.
 stays single-candidate and refuses (exit 2, hint to run `umbel unpin` first) to
 overwrite an existing multi-candidate pin.
 
-`umbel apply <name>` writes a single-candidate bundle pin. `umbel apply --vanilla`
+`umbel apply <name>` writes a single-candidate bundle pin. It also builds the
+bundle as a side effect — warming the cache and updating the `by-name/<name>`
+symlink, and printing a `built <path>` line — so a subsequent plain `umbel run`
+launches without a rebuild. `umbel apply --vanilla`
 writes the `__vanilla__` sentinel. `umbel unpin` removes the file. Commit it to
 share a default with your team, or `.gitignore` it for per-developer setup.
 
