@@ -28,6 +28,13 @@ _Avoid_: driver, plugin, backend.
 One of the five artifact kinds — skills, agents, hooks, mcps, settings — seen as a harness-agnostic axis. A bundle declares capabilities by naming artifacts; each adapter maps a capability to its harness's native form, degrades it (**best-effort**), or marks it **unsupported**. There is no abstract layer above the kinds.
 _Avoid_: feature, primitive.
 
+**Non-mutation**:
+The absolute promise that umbel never writes a bundle into the project tree or the real global config — it always injects via a relocated/external config. Holds on every harness, independent of suppression grade.
+
+**Suppression grade**:
+How completely a harness can be made to *ignore* its own ambient project/global config so only the bundle is active — distinct from non-mutation. Three values: **strict** (ambient fully shadowed — Claude Code), **scoped** (composable to strict via extra flags, at a cost — GitHub Copilot CLI), **best-effort** (injected config merges over ambient; cannot be suppressed — OpenCode, Pi). Each adapter declares its grade; the support matrix surfaces it honestly.
+_Avoid_: isolation (too absolute — it conflates non-mutation with suppression).
+
 ### Pinning
 
 **Pin**:
@@ -56,3 +63,4 @@ The launch-time picker over every discovered bundle, shown when no pin records a
 ## Flagged ambiguities
 
 - "pin" was used to mean both *the resolved bundle* and *a shortlist to choose from* — resolved: a pin is an ordered list of **candidates**; resolution to a single bundle happens directly (one candidate) or via the **scoped picker** (multiple).
+- "version" was read as an authored semantic release — resolved: a bundle's identity is a content **hash**, surfaced bare (`hash: <12-hex>`) in the harness-agnostic `bundle.md`. "Version" is only the Claude-Code-plugin-format string `0.0.0+<hash>` derived from that hash — it lives in `plugin.json` and is exported as `UMBEL_BUNDLE_VERSION`. Same identity, two representations; the `0.0.0+` shape is a CC plugin-schema artifact, not umbel data, so it stays out of `bundle.md`.
