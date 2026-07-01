@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve as pathResolve } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { applyPlan } from "./applier/apply.ts";
 import { BUNDLE_VERBS, helpText, parseArgs, parseSubcommand } from "./args.ts";
@@ -316,7 +317,11 @@ async function runBundleRun(rest: string[], env: NodeJS.ProcessEnv, cwd: string)
     // otherwise look like a freeze before claude's first output appears.
     onBuild: () => process.stderr.write(`building bundle '${resolvedName}'…\n`),
   });
-  emitWarnings(prepared.warnings);
+  // On the run path the harness TUI repaints over stderr immediately, erasing
+  // any warning before it can be read (ADR-0012 Axis B). When interactive, gate
+  // the launch on an explicit acknowledgment; non-TTY prints and proceeds (the
+  // warning survives in CI logs there, no TUI to erase it).
+  await gateWarnings(prepared.warnings, isInteractive(env), acknowledgeWarnings);
   const result = spawnSync(prepared.command, prepared.args, {
     env: prepared.env as NodeJS.ProcessEnv,
     stdio: "inherit",
@@ -379,6 +384,38 @@ async function runBundleApply(
 
 function emitWarnings(warnings: string[]): void {
   for (const w of warnings) process.stderr.write(`${w}\n`);
+}
+
+/**
+ * Warning gate for the run path (ADR-0012 Axis B). Always emits the warnings;
+ * when interactive, additionally blocks on `prompt` so the user acknowledges
+ * them before the harness TUI launches and repaints over them. `prompt` is
+ * injected so the decision logic is testable without real stdin.
+ */
+export async function gateWarnings(
+  warnings: string[],
+  interactive: boolean,
+  prompt: () => Promise<void>,
+): Promise<void> {
+  if (warnings.length === 0) return;
+  emitWarnings(warnings);
+  if (interactive) await prompt();
+}
+
+/** Block until the user presses Enter; Ctrl-C aborts with the standard 130. */
+function acknowledgeWarnings(): Promise<void> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    rl.once("SIGINT", () => {
+      rl.close();
+      process.stderr.write("\naborted\n");
+      process.exit(130);
+    });
+    rl.question("Press Enter to launch despite warnings (Ctrl-C to abort)… ", () => {
+      rl.close();
+      resolve();
+    });
+  });
 }
 
 function buildBundle(

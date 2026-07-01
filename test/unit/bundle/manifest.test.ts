@@ -195,7 +195,7 @@ mcps:
     },
   );
 
-  it("warns on unknown frontmatter field but does not error", () => {
+  it("warns on genuinely-unknown frontmatter field but does not error", () => {
     const path = writeBundle(
       "with-unknown",
       `---
@@ -210,6 +210,42 @@ plugins: [foo]
     expect(warnings).toHaveLength(2);
     expect(warnings.join("\n")).toMatch(/totallyMadeUp/);
     expect(warnings.join("\n")).toMatch(/plugins/);
+  });
+
+  it.each([
+    ["skils", "skills"],
+    ["skill", "skills"],
+    ["agent", "agents"],
+    ["mcp", "mcps"],
+    ["descriptin", "description"],
+    ["extend", "extends"],
+    ["setting", "settings"],
+  ])(
+    "errors (exit 2) on near-miss typo '%s' with a 'did you mean' hint for '%s'",
+    (typo, suggestion) => {
+      const path = writeBundle(`typo-${typo}`, `---\nname: typo\n${typo}: x\n---\n`);
+      let caught: unknown;
+      try {
+        loadManifest(path);
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(UsageError);
+      expect((caught as Error).message).toContain(`'${typo}'`);
+      expect((caught as Error).message).toMatch(new RegExp(`did you mean '${suggestion}'`, "i"));
+    },
+  );
+
+  it.each([
+    "skil", // distance 2 from "skills"
+    "totallyMadeUp",
+    "plugins",
+    "foobar",
+  ])("treats distance>1 field '%s' as a genuine-unknown warning (build proceeds)", (field) => {
+    const path = writeBundle(`far-${field}`, `---\nname: far\n${field}: x\n---\n`);
+    const { warnings } = loadManifest(path);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(new RegExp(`unknown field '${field}'`));
   });
 
   it("wraps a frontmatter parse error as an actionable UsageError, not a raw YAMLException", () => {

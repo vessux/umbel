@@ -159,13 +159,23 @@ Hard errors that abort the build:
 - Settings key not in whitelist.
 - Hooks schema invalid against CC's known shape.
 - MCP artifact `MCP.md` missing required `command`.
+- Unknown frontmatter field within **edit-distance ≤ 1 of a known field** —
+  treated as a typo (e.g. `skils:`), with a `did you mean 'skills'?` hint. See
+  [ADR-0012](adr/0012-unknown-frontmatter-field-validation.md).
 
 Soft warnings (stderr, build proceeds):
 
-- Unknown frontmatter field.
+- Genuinely-unknown frontmatter field (distance > 1 from every known field) —
+  ignored, but the format stays forward-compatible for real future fields.
 - Bundle skill name collides with `<project>/.claude/skills/<name>/`. Project
   wins at runtime.
 - Bundle declares MCPs and `mergeMcp: false` while `<project>/.mcp.json` exists.
+
+On `umbel run`, warnings are gated on an explicit acknowledgment before the
+harness launches when stdout is a TTY (the TUI would otherwise repaint over
+them); on a non-TTY the warnings print to stderr and the run proceeds (they
+survive in logs there). Other paths (`build`, `apply`) print warnings without
+gating.
 
 ## Compilation
 
