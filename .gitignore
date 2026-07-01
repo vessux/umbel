@@ -8,6 +8,8 @@ coverage/
 .env.*
 .claude/
 .mcp.json
+# delivery-superpowers / git worktrees live here; never part of the tree
+.worktrees/
 
 # Private / local-only (never committed)
 CLAUDE.local.md

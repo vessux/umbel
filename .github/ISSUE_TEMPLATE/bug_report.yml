@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in umbel isn't working as documented.
+labels: ["needs-triage", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please search existing issues first.
+        For security vulnerabilities, use the security policy instead of a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and how it differed from what you expected.
+      placeholder: Running `umbel run <bundle>` exited 3 instead of launching the session…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact command(s) you ran, and any relevant bundle / pin file.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: umbel version, Node version (`node -v`), and OS.
+      placeholder: |
+        umbel: 0.2.0
+        node: v22.x
+        os: Ubuntu 24.04 / macOS 15
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
