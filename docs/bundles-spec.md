@@ -753,28 +753,24 @@ For a single bundle, prints three sections:
 
 ## Implementation status
 
-Two items in this spec are designed but not yet implemented. Tracked here
-rather than in `docs/backlog.jsonl` because they are spec items, not
-discovered work.
+Both cache contracts below are **implemented and verified**.
 
-1. **`bundle.md` emission**. `umbel build` and `umbel apply` must write
+1. **`bundle.md` emission**. `umbel build` and `umbel apply` write
    `<cache>/bundle.md` per the "Self-describing `bundle.md`" subsection
    (resolved frontmatter, verbatim body, `## Invocation` block). The
-   `## Invocation` block is the single source of truth for the
-   bundle-features → claude-flags mapping; the existing
-   `prepareBundleInvocation` in `src/bundle/exec.ts` is the reference
-   implementation of that mapping and should be refactored so the build
-   and the wrapper share one code path.
+   bundle-features → claude-flags mapping is a single code path,
+   `computeClaudeArgs` in `src/bundle/claude-args.ts`, shared by the host
+   launch (`prepareBundleInvocation`) and the `## Invocation` block, so the
+   two can never drift.
 
 2. **`by-name/<name>` stable symlink**. `umbel build` and `umbel apply`
-   must atomically update `~/.cache/umbel/bundles/by-name/<name>` to
-   point at the just-built hash dir (symlink + rename). The "Stable-name
-   symlink" subsection specifies the contract. GC must additionally
-   preserve the hash dir currently targeted by any `by-name/` symlink
+   atomically update `~/.cache/umbel/bundles/by-name/<name>` to point at the
+   just-built hash dir (symlink + rename), per the "Stable-name symlink"
+   subsection. GC preserves the hash dir a `by-name/` symlink targets
    regardless of its mtime rank.
 
-External consumers (openlock, devcontainers, shell wrappers) depend on
-both. See `docs/openlock-interop.md` for one wiring example.
+External consumers (devcontainers, shell wrappers) can rely on both
+contracts.
 
 ## Examples
 
