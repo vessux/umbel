@@ -153,14 +153,27 @@ export function loadManifest(path: string): ManifestResult {
 
   const warnings: string[] = [];
   for (const key of Object.keys(data)) {
-    if (!KNOWN_FIELDS.has(key)) {
-      warnings.push(`bundle ${path}: unknown field '${key}' (ignored)`);
+    if (KNOWN_FIELDS.has(key)) continue;
+    // Hybrid validation (ADR-0012): a near-miss of a known field is almost
+    // certainly a typo, which carries no forward-compat value — fail it hard so
+    // the footgun (`skils:` silently dropping skills) dies at build time. A
+    // genuinely-unknown field stays a warning, preserving forward-compat for
+    // real future fields.
+    const suggestion = nearestKnownField(key);
+    if (suggestion) {
+      throw new UsageError(
+        `bundle ${path}: unknown field '${key}' — did you mean '${suggestion}'?`,
+      );
     }
+    warnings.push(`bundle ${path}: unknown field '${key}' (ignored)`);
   }
 
   return { manifest, warnings };
 }
 
+// Self-constraint (ADR-0012, enforce in review): umbel must NOT add a
+// frontmatter field within edit-distance-1 of an existing one, or the near-miss
+// rule below could false-positive a legitimate new field as a typo.
 const KNOWN_FIELDS = new Set([
   "name",
   "description",
@@ -172,5 +185,38 @@ const KNOWN_FIELDS = new Set([
   "mergeMcp",
   "settings",
 ]);
+
+/** First known field within edit-distance 1 of `key`, or undefined. */
+function nearestKnownField(key: string): string | undefined {
+  for (const field of KNOWN_FIELDS) {
+    if (withinEditDistance1(key, field)) return field;
+  }
+  return undefined;
+}
+
+/** True if `a` and `b` are within Levenshtein distance 1 (≤1 insert/delete/substitute). */
+function withinEditDistance1(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  // Walk both strings; allow a single divergence.
+  const [short, long] = la <= lb ? [a, b] : [b, a];
+  let i = 0;
+  let j = 0;
+  let edited = false;
+  while (i < short.length && j < long.length) {
+    if (short[i] === long[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (edited) return false;
+    edited = true;
+    if (short.length === long.length) i++; // substitution
+    j++; // consume the diverging char in the longer string
+  }
+  return true;
+}
 
 const SETTINGS_WHITELIST = new Set(["model", "env", "statusLine", "permissions", "outputStyle"]);

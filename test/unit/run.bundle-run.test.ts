@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { run } from "../../src/run.ts";
+import { gateWarnings, run } from "../../src/run.ts";
 import { cleanup, makeTmpDir } from "../helpers/tmp.ts";
 
 const haveClaude = spawnSync("which", ["claude"]).status === 0;
@@ -158,5 +158,38 @@ describe("run() bundle run", () => {
     expect(code).toBe(1);
     expect(stderr.join("")).toMatch(/'claude' not found on PATH/);
     expect(stderr.join("")).not.toMatch(/building bundle/);
+  });
+
+  it("non-TTY run of a bundle with a genuine-unknown field prints the warning and proceeds", async () => {
+    writeFileSync(
+      join(agentsDir, "bundles", "warny.md"),
+      "---\nname: warny\nnotarealfield: true\n---\n",
+    );
+    const code = await run(["run", "warny"], envWith({ NO_TTY: "1", PATH: "/" }), cwd);
+    expect(code).toBe(1); // proceeds to spawn; claude not on PATH=/
+    expect(stderr.join("")).toMatch(/unknown field 'notarealfield'/);
+  });
+
+  describe("gateWarnings", () => {
+    it("does nothing (no emit, no prompt) when there are no warnings", async () => {
+      const prompt = vi.fn(async () => {});
+      await gateWarnings([], true, prompt);
+      expect(prompt).not.toHaveBeenCalled();
+      expect(stderr.join("")).toBe("");
+    });
+
+    it("non-interactive: emits warnings to stderr but does NOT block on a prompt", async () => {
+      const prompt = vi.fn(async () => {});
+      await gateWarnings(["bundle x: unknown field 'foo' (ignored)"], false, prompt);
+      expect(prompt).not.toHaveBeenCalled();
+      expect(stderr.join("")).toMatch(/unknown field 'foo'/);
+    });
+
+    it("interactive (TTY): emits warnings AND awaits the acknowledgment prompt", async () => {
+      const prompt = vi.fn(async () => {});
+      await gateWarnings(["bundle x: unknown field 'foo' (ignored)"], true, prompt);
+      expect(prompt).toHaveBeenCalledTimes(1);
+      expect(stderr.join("")).toMatch(/unknown field 'foo'/);
+    });
   });
 });
