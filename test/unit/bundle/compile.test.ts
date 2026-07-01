@@ -1,4 +1,11 @@
-import { mkdirSync, readFileSync, readlinkSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { join, basename as pathBasename } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gcBundles } from "../../../src/bundle/cache.ts";
@@ -569,10 +576,14 @@ describe("compile", () => {
           keepCache: 3,
         },
       );
-      compile(bundle({ name: "keepy", description: "v2" }), emptySources(), {
-        cacheRoot,
-        keepCache: 3,
-      });
+      const { cacheDir: v2 } = compile(
+        bundle({ name: "keepy", description: "v2" }),
+        emptySources(),
+        {
+          cacheRoot,
+          keepCache: 3,
+        },
+      );
       const { cacheDir: v3 } = compile(
         bundle({ name: "keepy", description: "v3" }),
         emptySources(),
@@ -581,6 +592,14 @@ describe("compile", () => {
           keepCache: 3,
         },
       );
+      // Stamp distinct increasing mtimes (v1 < v2 < v3). gcBundles ranks by
+      // mtimeMs and its comparator returns 0 on a tie, so same-ms compiles would
+      // leave the survivor at the mercy of readdir order — flaky. This makes the
+      // "v3 is newest" assertion total; do not remove.
+      const t = Date.now() / 1000;
+      utimesSync(v1, t - 20, t - 20);
+      utimesSync(v2, t - 10, t - 10);
+      utimesSync(v3, t, t);
       // Re-point symlink at v1 (the oldest by mtime).
       const link = join(cacheRoot, "bundles", "by-name", "keepy");
       unlinkSync(link);
@@ -609,6 +628,13 @@ describe("compile", () => {
           keepCache: 3,
         },
       );
+      // Stamp distinct mtimes (v1 < v2) so v2 is unambiguously newest. Same-ms
+      // compiles tie in gcBundles' comparator (returns 0), leaving the survivor
+      // at the mercy of readdir order — the source of this test's flakiness.
+      // Do not remove.
+      const t = Date.now() / 1000;
+      utimesSync(v1, t - 10, t - 10);
+      utimesSync(v2, t, t);
       // Delete the symlink, then GC with keep=1 — v1 should be dropped (no protection).
       unlinkSync(join(cacheRoot, "bundles", "by-name", "noln"));
       gcBundles(cacheRoot, "noln", 1);
