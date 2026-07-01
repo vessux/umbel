@@ -4,11 +4,15 @@ import type { BundleManifest, BundleSettings } from "./manifest.ts";
 
 export type ResolvedBundle = Omit<BundleManifest, "extends">;
 
-export function compose(name: string, index: Map<string, BundleManifest>): ResolvedBundle {
+export function compose(
+  name: string,
+  index: Map<string, BundleManifest>,
+  malformed: Map<string, string> = new Map(),
+): ResolvedBundle {
   if (!index.has(name)) {
     throw new NotFoundError(`bundle '${name}' not found`);
   }
-  const order = linearize(name, index);
+  const order = linearize(name, index, malformed);
   // order is oldest-first: ancestors before descendants. Merge left-to-right
   // so each subsequent bundle overrides what came before.
   let merged: ResolvedBundle | undefined;
@@ -19,8 +23,12 @@ export function compose(name: string, index: Map<string, BundleManifest>): Resol
   return merged!;
 }
 
-export function composeChain(name: string, index: Map<string, BundleManifest>): string[] {
-  return linearize(name, index);
+export function composeChain(
+  name: string,
+  index: Map<string, BundleManifest>,
+  malformed: Map<string, string> = new Map(),
+): string[] {
+  return linearize(name, index, malformed);
 }
 
 function stripExtends(b: BundleManifest): ResolvedBundle {
@@ -30,10 +38,19 @@ function stripExtends(b: BundleManifest): ResolvedBundle {
 
 /**
  * Post-order DFS over the extends DAG. Returns ancestors-first ordering
- * with each bundle appearing exactly once. Throws on missing parent or
- * cycle, with chain trace.
+ * with each bundle appearing exactly once. Throws on cycle, on a
+ * present-but-malformed parent (UsageError, surfacing its own error), or on a
+ * genuinely-missing parent (NotFoundError) — all with a chain trace.
+ *
+ * `malformed` maps a parent name to its stored validation error. It is a plain
+ * primitive (name → error string) so this composer stays decoupled from
+ * discovery's BundleEntry type.
  */
-function linearize(start: string, index: Map<string, BundleManifest>): string[] {
+function linearize(
+  start: string,
+  index: Map<string, BundleManifest>,
+  malformed: Map<string, string> = new Map(),
+): string[] {
   const out: string[] = [];
   const visited = new Set<string>();
   const stack: string[] = [];
@@ -47,9 +64,14 @@ function linearize(start: string, index: Map<string, BundleManifest>): string[] 
     }
     const cur = index.get(n);
     if (!cur) {
-      throw new NotFoundError(
-        `bundle '${start}' extends missing parent '${n}' (chain: ${[...stack, n].join(" → ")})`,
-      );
+      const chain = [...stack, n].join(" → ");
+      const err = malformed.get(n);
+      if (err !== undefined) {
+        throw new UsageError(
+          `bundle '${start}' extends '${n}', which is malformed: ${err} (chain: ${chain})`,
+        );
+      }
+      throw new NotFoundError(`bundle '${start}' extends missing parent '${n}' (chain: ${chain})`);
     }
     stack.push(n);
     for (const p of cur.extends ?? []) visit(p);

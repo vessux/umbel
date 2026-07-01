@@ -146,6 +146,35 @@ describe("compose", () => {
     expect(err.exitCode).toBe(2);
     expect(err.message).toMatch(/cycle/i);
   });
+
+  it("malformed parent (in the malformed map) → usage error (exit 2), names parent + error + chain", () => {
+    const ix = index(m("leaf", { extends: ["base"] }));
+    const malformed = new Map([["base", "settings.notAllowed is not in the whitelist"]]);
+    const err = thrown(() => compose("leaf", ix, malformed));
+    expect(err.name).toBe("UsageError");
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/'base'/);
+    expect(err.message).toMatch(/not in the whitelist/);
+    expect(err.message).toMatch(/leaf → base/);
+  });
+
+  it("malformed grandparent (transitive, depth ≥ 2) → usage error (exit 2) with chain trace", () => {
+    const ix = index(m("leaf", { extends: ["mid"] }), m("mid", { extends: ["gp"] }));
+    const malformed = new Map([["gp", "invalid YAML in frontmatter"]]);
+    const err = thrown(() => compose("leaf", ix, malformed));
+    expect(err.name).toBe("UsageError");
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/'gp'/);
+    expect(err.message).toMatch(/leaf → mid → gp/);
+  });
+
+  it("missing parent NOT in the malformed map → still not found (exit 3)", () => {
+    const ix = index(m("child", { extends: ["ghost"] }));
+    const err = thrown(() => compose("child", ix, new Map<string, string>()));
+    expect(err.name).toBe("NotFoundError");
+    expect(err.exitCode).toBe(3);
+    expect(err.message).toMatch(/missing parent 'ghost'/);
+  });
 });
 
 import type { ResolvedBundle } from "../../../src/bundle/compose.ts";
