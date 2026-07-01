@@ -88,7 +88,16 @@ export function resolveBundle(
     }
     throw new NotFoundError(`bundle '${name}' not found`);
   }
-  const resolved = compose(name, ix);
+  // A parent reached transitively via `extends` may be present-but-malformed
+  // (has no manifest, so it's absent from `ix`). Thread its error into compose
+  // so linearize can report exit 2 (validation) rather than exit 3 (missing).
+  const malformed = new Map<string, string>();
+  for (const e of index.entries) {
+    if (e.malformed && !ix.has(e.name) && !malformed.has(e.name)) {
+      malformed.set(e.name, e.error ?? `bundle '${e.name}' is malformed`);
+    }
+  }
+  const resolved = compose(name, ix, malformed);
   const chain = new Set(composeChain(name, ix));
   const warnings = [
     ...new Set(

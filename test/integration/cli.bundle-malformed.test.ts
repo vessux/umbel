@@ -58,4 +58,22 @@ describe("cli bundle exit codes", () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toMatch(/unknown field 'bogusKey'/);
   });
+
+  it("exit 2 when a bundle extends a present-but-malformed parent, surfacing the parent's error", () => {
+    writeFileSync(join(bundles, "base.md"), "---\nname: base\nsettings:\n  notAllowed: 1\n---\n");
+    writeFileSync(join(bundles, "leaf.md"), "---\nname: leaf\nextends: [base]\n---\n");
+    const r = runCli(["build", "leaf"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/not in the whitelist/);
+    expect(r.stderr).toMatch(/base/);
+    expect(r.stderr).not.toMatch(/missing parent/);
+  });
+
+  it("exit 3 when a bundle extends a truly-absent parent (regression)", () => {
+    writeFileSync(join(bundles, "orphan.md"), "---\nname: orphan\nextends: [nope]\n---\n");
+    const r = runCli(["build", "orphan"]);
+    expect(r.status).toBe(3);
+    expect(r.stderr).toMatch(/missing parent/);
+    expect(r.stderr).toMatch(/nope/);
+  });
 });
