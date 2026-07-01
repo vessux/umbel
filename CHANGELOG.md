@@ -34,12 +34,6 @@ While pre-1.0, minor versions may carry breaking changes.
   loader output (#25).
 - A malformed parent in an `extends` chain now exits 2, not 3 (#35).
 
-### Docs
-
-- New ADRs 0007–0012 (multi-candidate pins, graded harness isolation, capability
-  axes, harness selection, bundle hashing, frontmatter validation) and an
-  authoring cookbook.
-
 ## [0.1.3] - 2026-05-26
 
 ### Fixed
@@ -61,10 +55,6 @@ While pre-1.0, minor versions may carry breaking changes.
 ### Fixed
 
 - Surface frontmatter parse errors as an actionable `UsageError` (#1).
-
-### Docs
-
-- Add "Installing artifacts", isolation, and troubleshooting sections (#2).
 
 ## [0.1.0] - 2026-05-26
 
