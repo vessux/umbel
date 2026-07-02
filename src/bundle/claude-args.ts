@@ -8,7 +8,17 @@ import type { ResolvedBundle } from "./compose.ts";
  * cache directory path — no filesystem inspection.
  */
 export function computeClaudeArgs(bundle: ResolvedBundle, cacheDir: string): string[] {
-  const args: string[] = ["--plugin-dir", cacheDir];
+  const args: string[] = [];
+
+  // Opt-in full isolation. `--plugin-dir` only ADDS the bundle on top of the
+  // user's normal discovery, so globally-enabled plugins and ~/.claude skills
+  // still leak in. `--bare` makes Claude Code load ONLY the explicitly-passed
+  // plugin (and its skills/agents) — it skips user plugins, ~/.claude skills,
+  // and project-scope auto-discovery, while still honouring the bundle's own
+  // --settings / --mcp-config below.
+  if (bundle.isolate === true) args.push("--bare");
+
+  args.push("--plugin-dir", cacheDir);
 
   if (hasSettings(bundle)) {
     args.push("--settings", join(cacheDir, "settings.json"));

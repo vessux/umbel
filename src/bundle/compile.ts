@@ -372,6 +372,7 @@ function resolvedFrontmatter(bundle: ResolvedBundle, hash: string): Record<strin
     if (v !== undefined && v.length > 0) out[f] = v;
   }
   if (bundle.mergeMcp !== undefined) out.mergeMcp = bundle.mergeMcp;
+  if (bundle.isolate !== undefined) out.isolate = bundle.isolate;
   if (bundle.settings && Object.keys(bundle.settings).length > 0) {
     out.settings = bundle.settings;
   }

@@ -87,6 +87,7 @@ in DuckDB / pandas.
 | `hooks`          | no       | list of qualified refs | Each entry is `<source>/<leaf>`. Resolved against `~/.config/umbel/hooks/<source>/<leaf>/HOOK.md` + sidecars. |
 | `mcps`           | no       | list of qualified refs | Each entry is `<source>/<leaf>`. Resolved against `~/.config/umbel/mcps/<source>/<leaf>/MCP.md` + sidecars. |
 | `mergeMcp`       | no       | bool, default false | When true, omit `--strict-mcp-config`; bundle MCPs add to project. |
+| `isolate`        | no       | bool, default false | When true, launch adds `--bare` so the session loads **only** the bundle's artifacts — user plugins, `~/.claude/skills`, and project-scope auto-discovery are skipped. Default keeps the additive behaviour where `--plugin-dir` layers the bundle on top of normal discovery. |
 | `settings`       | no       | object              | Whitelisted keys only (see [Settings whitelist](#settings-whitelist)). |
 
 Unknown fields → build warning, ignored.
@@ -144,7 +145,7 @@ subfolders). Per-artifact root override is not in scope.
    - **Lists** (`skills`, `agents`, `hooks`, `mcps`):
      concat parent's then child's, dedupe by ref with **child winning**.
    - **Maps** (`settings`): deep-merge with child keys overriding.
-   - **Scalars** (`description`, `mergeMcp`): child overrides parent.
+   - **Scalars** (`description`, `mergeMcp`, `isolate`): child overrides parent.
 4. `extends:` itself is not inherited (each bundle declares its own parents).
 
 Missing parent name → build error.
@@ -299,6 +300,11 @@ Rules for the `## Invocation` block:
 - `--mcp-config` line present only when `.mcp.json` was emitted.
 - `--strict-mcp-config` line present only when previous AND `mergeMcp` is
   not `true`.
+- `--bare` line present (before `--plugin-dir`) only when `isolate` is `true`.
+  `--plugin-dir` alone is additive — Claude Code layers the bundle on top of
+  the user's enabled plugins and `~/.claude/skills`; `--bare` makes it load
+  only the bundle plugin while still honouring the `--settings` / `--mcp-config`
+  emitted below.
 - Future bundle frontmatter fields that map to claude flags add new lines
   here. This is the **single source of truth** for the bundle-features →
   claude-flags mapping; consumers do not reimplement it.

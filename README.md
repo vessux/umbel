@@ -130,20 +130,38 @@ See [`docs/bundles-spec.md`](docs/bundles-spec.md) for the full design.
 
 ## What's isolated, what leaks
 
-A bundle session does **not** see your everyday Claude Code skills, agents, or
-plugins from `~/.claude/`. Some surfaces still pass through, by design or by
-quirk:
+By default a bundle is **additive**: `umbel run` launches `claude --plugin-dir
+<cache>`, and in Claude Code `--plugin-dir` only *adds* the bundle on top of
+your normal discovery. So your globally-enabled plugins (`enabledPlugins` in
+`~/.claude/settings.json`) and `~/.claude/skills` still show up in the session.
+Set [`isolate: true`](docs/bundles-spec.md) on the bundle to suppress them.
 
-| Surface                                       | Visible under a bundle?     | How to control it                                                           |
-|-----------------------------------------------|-----------------------------|-----------------------------------------------------------------------------|
-| `~/.claude/skills`, `agents`, `plugins`       | **No** — fully isolated     | Nothing to do; `--plugin-dir` + `--settings` replace user-scope sources.    |
-| `~/.claude/` oauth, history, projects state   | Yes (shared on purpose)     | Keeps you logged in across bundles. Bundles never write here.               |
-| `<project>/.claude/skills`, `agents`          | **Yes — baseline leak**     | Keep the dir empty, or move those skills into a project-scope bundle (see below). |
-| `<project>/.mcp.json`                         | No, when bundle defines MCPs| Bundle adds `--strict-mcp-config`. Set [`mergeMcp: true`](docs/bundles-spec.md) to additive-merge. |
-| `<project>/.mcp.json`                         | Yes, when bundle has no MCPs| The strict flag is only emitted alongside bundle MCPs.                      |
+| Surface                                       | Visible under a bundle?           | How to control it                                                           |
+|-----------------------------------------------|-----------------------------------|-----------------------------------------------------------------------------|
+| `~/.claude/skills`, `agents`, enabled `plugins` | **Yes, by default — leaks**       | `--plugin-dir` only adds the bundle; it does not replace user-scope discovery. Set [`isolate: true`](docs/bundles-spec.md) to launch with `--bare` and load **only** the bundle. |
+| `~/.claude/` oauth, history, projects state   | Yes (shared on purpose)           | Keeps you logged in across bundles. Bundles never write here. `isolate` does not touch this. |
+| `<project>/.claude/skills`, `agents`          | **Yes — baseline leak**           | `isolate: true` (`--bare`) drops these too; otherwise keep the dir empty, or move those skills into a project-scope bundle (see below). |
+| `<project>/.mcp.json`                         | No, when bundle defines MCPs      | Bundle adds `--strict-mcp-config`. Set [`mergeMcp: true`](docs/bundles-spec.md) to additive-merge. |
+| `<project>/.mcp.json`                         | Yes, when bundle has no MCPs      | The strict flag is only emitted alongside bundle MCPs.                      |
 
 So if your goal is "don't show me anything other than what this bundle
-declares", you have to:
+declares", set `isolate: true`:
+
+```yaml
+---
+name: thinking
+isolate: true
+skills: [local/brainstorming, local/tdd]
+---
+```
+
+This launches `claude --bare --plugin-dir <cache> …`, so Claude Code loads
+**only** the bundle's skills/agents — no user plugins, no `~/.claude/skills`,
+no project-scope auto-discovery. The bundle's own `--settings` / `--mcp-config`
+still apply, and shared state (oauth, history) is untouched.
+
+Without `isolate` the bundle stays purely additive (the default). To narrow an
+additive session by hand instead:
 
 1. Author the bundle (user-scope or project-scope — bundles themselves are
    not the leak).

@@ -93,6 +93,7 @@ function mergePair(parent: ResolvedBundle, child: BundleManifest): ResolvedBundl
   if (childPlain.body !== undefined) out.body = childPlain.body;
   if (childPlain.description !== undefined) out.description = childPlain.description;
   if (childPlain.mergeMcp !== undefined) out.mergeMcp = childPlain.mergeMcp;
+  if (childPlain.isolate !== undefined) out.isolate = childPlain.isolate;
 
   for (const f of ARTIFACT_KINDS) {
     const merged = mergeStringList(parent[f], childPlain[f]);
