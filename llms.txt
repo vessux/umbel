@@ -1,0 +1,26 @@
+# umbel
+
+> Compose Claude Code sessions from named bundles of skills, subagents, hooks, MCP servers, and settings. A bundle build is a content-addressed cache; a per-project PATH shim routes each project to its bundle without touching your real `~/.claude/`.
+
+## Docs
+
+- [README](https://github.com/vessux/umbel/blob/main/README.md): install, quickstart, the verbs, the PATH shim, pin files, bundle resolution order, env vars, and exit codes
+- [Bundle spec](https://github.com/vessux/umbel/blob/main/docs/bundles-spec.md): the bundle design — artifact model, build/cache, resolution, and precedence
+- [Authoring cookbook](https://github.com/vessux/umbel/blob/main/docs/cookbook.md): recipes for building and pinning bundles
+- [Contributing](https://github.com/vessux/umbel/blob/main/CONTRIBUTING.md): toolchain, conventions, and how to propose changes
+- [Changelog](https://github.com/vessux/umbel/blob/main/CHANGELOG.md): notable changes per release
+
+## Design decisions
+
+- [ADR index](https://github.com/vessux/umbel/blob/main/docs/adr/README.md): architecture decision records (content-addressed builds, XDG layout, plugin path resolution, per-project routing, multi-candidate pins, graded harness isolation, capability axes, frontmatter validation)
+
+## Agent workflow
+
+- [Domain docs](https://github.com/vessux/umbel/blob/main/docs/agents/domain.md): single-context CONTEXT.md + ADR conventions
+- [Issue tracker](https://github.com/vessux/umbel/blob/main/docs/agents/issue-tracker.md): issues via the `gh` CLI on `vessux/umbel`
+- [Triage labels](https://github.com/vessux/umbel/blob/main/docs/agents/triage-labels.md): canonical label set and their meaning
+
+## Optional
+
+- [Security policy](https://github.com/vessux/umbel/blob/main/SECURITY.md): how to report vulnerabilities
+- [License](https://github.com/vessux/umbel/blob/main/LICENSE): MIT
