@@ -7,12 +7,39 @@ umbel composes per-project sets of skills/agents/config into a **bundle** and ro
 ### Bundles & running
 
 **Bundle**:
-A named, composable set of skills/agents/config that a **harness** runs under (today, only Claude Code).
-_Avoid_: package, profile, preset.
+A named, composable set of **artifacts** (skills/agents/hooks/mcps) plus `settings`, defined by a `bundle.md` manifest in two layers — the **dependencies** it draws from and the **composition** of artifacts it activates. A **harness** runs under it (today, only Claude Code).
+_Avoid_: package, profile, preset, plugin.
 
 **Vanilla**:
 Running a harness with no bundle applied (today, plain `claude`).
 _Avoid_: bare, default, none.
+
+### Dependencies & acquisition
+
+**Artifact**:
+A single skill, agent, hook, or MCP server — the composable unit a bundle activates. The canonical unit term (see ADR-0002).
+_Avoid_: atom, item, primitive.
+
+**Dependency**:
+A versioned upstream a bundle draws artifacts from — a git repo, a subdirectory of one, a local checkout, or the built-in `local`. Declared in a bundle's `deps:` map as an operator-chosen **alias** bound to a **coordinate**. umbel is, at bottom, a dependency-manager for capabilities.
+_Avoid_: source (retired), package, plugin.
+
+**Coordinate**:
+A dependency's address: `github:org/repo@ref#subpath`, `git:url@ref`, `link:path` (a local directory — the only form that expands `${…}` variables), or `local`.
+
+**Alias**:
+The operator-chosen short name a bundle binds a coordinate to; the `<alias>` half of a composition ref (`<alias>/<leaf>`). **Bundle-private** — never inherited across `extends`.
+
+**Lock**:
+A bundle's sibling `<name>.lock`, pinning each dependency to a resolved commit + content hash. Distinct from a **Pin** (see below).
+_Avoid_: pin.
+
+**Store**:
+The on-disk set of fetched dependency checkouts (`$XDG_DATA_HOME/umbel/store`), kept as-is and indexed in place. Data-grade (persistent) — git upstreams are not a guaranteed-refetchable registry.
+
+**Pack**:
+Producing a self-contained directory from a bundle (artifacts copied in) that runs as a plugin without umbel *and* re-imports into umbel — the outbound plugin boundary I/O.
+_Avoid_: vendor, export, build.
 
 ### Harnesses
 
@@ -63,4 +90,6 @@ The launch-time picker over every discovered bundle, shown when no pin records a
 ## Flagged ambiguities
 
 - "pin" was used to mean both *the resolved bundle* and *a shortlist to choose from* — resolved: a pin is an ordered list of **candidates**; resolution to a single bundle happens directly (one candidate) or via the **scoped picker** (multiple).
+- "pin" vs "lock" — resolved: a **Pin** (`.umbel-bundle`) records *which bundle applies to a project*; a **Lock** (`<name>.lock`) records *which upstream versions a bundle resolves to*. Different concepts, different files.
+- "source" — the ADR-0002 sense (an arbitrary operator-chosen `<source>/<leaf>` attribution label) is **retired** by ADR-0013: a bundle now declares **dependencies** (an alias bound to a coordinate) via `deps:`. The naming freedom moves to the alias; the coordinate + lock add provenance and reproducibility.
 - "version" was read as an authored semantic release — resolved: a bundle's identity is a content **hash**, surfaced bare (`hash: <12-hex>`) in the harness-agnostic `bundle.md`. "Version" is only the Claude-Code-plugin-format string `0.0.0+<hash>` derived from that hash — it lives in `plugin.json` and is exported as `UMBEL_BUNDLE_VERSION`. Same identity, two representations; the `0.0.0+` shape is a CC plugin-schema artifact, not umbel data, so it stays out of `bundle.md`.
