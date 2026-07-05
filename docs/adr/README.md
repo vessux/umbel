@@ -29,3 +29,8 @@ from the diff.
 | [0008](0008-graded-harness-isolation.md) | Harness isolation is graded; config injection is a per-harness launch spec |
 | [0009](0009-capability-axes-are-the-artifact-kinds.md) | The capability axes are the existing artifact kinds — no abstract layer, no rename |
 | [0010](0010-harness-selected-by-invoked-binary.md) | The harness is selected by the invoked binary, not declared by the bundle |
+| [0011](0011-bundle-md-carries-hash-not-version.md) | bundle.md carries the content hash, not the CC version string |
+| [0012](0012-unknown-frontmatter-field-validation.md) | Unknown frontmatter fields: fail-fast on typos, warn on genuine unknowns |
+| [0013](0013-umbel-is-a-capability-dependency-manager.md) | umbel is a dependency-manager for capabilities; the plugin is boundary I/O |
+| [0014](0014-artifact-trust-gate.md) | Trust: gate auto-run artifacts by content hash; skills execute at the harness's discretion |
+| [0015](0015-bundle-authoring-model.md) | Bundle authoring: manifest is the source of truth; interleaved wizard, comment-preserving verbs |
