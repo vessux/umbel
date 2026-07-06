@@ -47,8 +47,9 @@ export function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string): num
   if (leaf === undefined) {
     if (leaves.size > 1) {
       const sorted = [...leaves.keys()].sort();
+      const bundleHint = bundleFlag !== undefined ? ` --bundle ${entry.name}` : "";
       throw new UsageError(
-        `umbel add: ${coord.raw} has ${leaves.size} skills; pick one: umbel add ${coord.raw} <leaf>\n  ${sorted.join(", ")}`,
+        `umbel add: ${coord.raw} has ${leaves.size} skills; pick one: umbel add ${coord.raw} <leaf>${bundleHint}\n  ${sorted.join(", ")}`,
       );
     }
     leaf = [...leaves.keys()][0]!;
@@ -75,12 +76,15 @@ export function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string): num
     currentLockRaw = readFileSync(lockPath, "utf8");
   } catch {}
   const lockChanged = currentLockRaw !== serializeLock(nextLock);
-  if (lockChanged) writeLock(lockPath, nextLock);
 
   const ref = `${alias}/${leaf}`;
   const raw = readFileSync(entry.path, "utf8");
+  // Compute the manifest edit before any write: a throwing edit must not
+  // leave an orphan lock entry behind.
   const edited = addDepEdit(raw, alias, coord.raw, ref);
   const manifestChanged = edited !== raw;
+
+  if (lockChanged) writeLock(lockPath, nextLock);
   if (manifestChanged) writeFileSync(entry.path, edited);
 
   if (!lockChanged && !manifestChanged) {
@@ -110,7 +114,9 @@ function parseAddArgs(rest: string[]): {
       bundleFlag = v;
       i++;
     } else if (a.startsWith("--bundle=")) {
-      bundleFlag = a.slice("--bundle=".length);
+      const v = a.slice("--bundle=".length);
+      if (v.length === 0) throw new UsageError("--bundle requires a value");
+      bundleFlag = v;
     } else if (a.startsWith("-")) {
       throw new UsageError(`umbel add: unknown flag: ${a}`);
     } else {

@@ -46,7 +46,7 @@ describe("runAdd", () => {
 
   it("errors with the sorted candidate list when several skills and no leaf given", () => {
     expect(() => runAdd(["github:acme/tools@v1", "--bundle", "dev"], env, root)).toThrow(
-      /pick one.*farewell, greet/s,
+      /pick one.*--bundle dev.*farewell, greet/s,
     );
   });
 
@@ -94,5 +94,23 @@ describe("runAdd", () => {
     writeFileSync(join(project, ".umbel-bundle"), "dev\n");
     const code = runAdd(["github:acme/tools@v1", "greet"], env, project);
     expect(code).toBe(0);
+  });
+
+  it("accepts the --bundle=<name> form", () => {
+    const code = runAdd(["github:acme/tools@v1", "greet", "--bundle=dev"], env, root);
+    expect(code).toBe(0);
+    expect(readLock(join(root, "config/bundles/dev.lock"))?.deps.tools).toBeDefined();
+  });
+
+  it("errors when the --bundle name is not found", () => {
+    expect(() => runAdd(["github:acme/tools@v1", "greet", "--bundle", "ghost"], env, root)).toThrow(
+      /not found/,
+    );
+  });
+
+  it("rejects --bundle= with an empty value", () => {
+    expect(() => runAdd(["github:acme/tools@v1", "greet", "--bundle="], env, root)).toThrow(
+      /--bundle requires a value/,
+    );
   });
 });
