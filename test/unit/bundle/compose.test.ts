@@ -175,6 +175,22 @@ describe("compose", () => {
     expect(err.exitCode).toBe(3);
     expect(err.message).toMatch(/missing parent 'ghost'/);
   });
+
+  it("deps: child map replaces parent wholesale (aliases are bundle-private)", () => {
+    const ix = index(
+      m("base", { deps: { a: "github:x/a@v1" } }),
+      m("child", { extends: ["base"], deps: { b: "github:x/b@v1" } }),
+    );
+    expect(compose("child", ix).deps).toEqual({ b: "github:x/b@v1" });
+  });
+
+  it("deps: parent map survives when child declares none", () => {
+    const ix = index(
+      m("base", { deps: { a: "github:x/a@v1" } }),
+      m("child", { extends: ["base"] }),
+    );
+    expect(compose("child", ix).deps).toEqual({ a: "github:x/a@v1" });
+  });
 });
 
 import type { ResolvedBundle } from "../../../src/bundle/compose.ts";

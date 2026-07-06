@@ -259,4 +259,26 @@ plugins: [foo]
     expect(caught).toBeInstanceOf(UsageError);
     expect((caught as Error).message).toMatch(/description: >-|block scalar/);
   });
+
+  it("parses deps as an alias → coordinate map", () => {
+    const path = writeBundle("dev", "---\nname: dev\ndeps:\n  tools: github:acme/tools@v1\n---\n");
+    const { manifest, warnings } = loadManifest(path);
+    expect(manifest.deps).toEqual({ tools: "github:acme/tools@v1" });
+    expect(warnings).toEqual([]);
+  });
+
+  it("rejects a non-map deps", () => {
+    const path = writeBundle("dev", "---\nname: dev\ndeps: [x]\n---\n");
+    expect(() => loadManifest(path)).toThrow(/deps.*map/i);
+  });
+
+  it("rejects an invalid deps alias", () => {
+    const path = writeBundle("dev", "---\nname: dev\ndeps:\n  Bad_Alias: github:a/b@v1\n---\n");
+    expect(() => loadManifest(path)).toThrow(/alias/i);
+  });
+
+  it("rejects a non-string deps coordinate", () => {
+    const path = writeBundle("dev", "---\nname: dev\ndeps:\n  tools: 3\n---\n");
+    expect(() => loadManifest(path)).toThrow(/coordinate/i);
+  });
 });
