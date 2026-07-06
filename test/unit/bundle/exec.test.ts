@@ -140,6 +140,17 @@ describe("prepareBundleInvocation", () => {
     const inv = prepareBundleInvocation({ name: "warny", claudeArgs: [], env: envWith(), cwd });
     expect(inv.warnings.some((w) => w.includes("bogusKey"))).toBe(true);
   });
+
+  it("rejects deps: combined with extends (resolve-then-merge not shipped yet)", () => {
+    bundleFile("parent", "---\nname: parent\n---\n");
+    bundleFile(
+      "child",
+      "---\nname: child\nextends: [parent]\ndeps:\n  tools: github:acme/tools@v1\n---\n",
+    );
+    expect(() =>
+      prepareBundleInvocation({ name: "child", claudeArgs: [], env: envWith(), cwd }),
+    ).toThrow(/'deps:'.*'extends'.*not supported yet/);
+  });
 });
 
 describe("resolveBundleName", () => {

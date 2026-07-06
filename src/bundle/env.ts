@@ -38,6 +38,10 @@ export function shimDir(env: NodeJS.ProcessEnv): string {
   return join(umbelDataRoot(env), "bin");
 }
 
+export function storeRootDir(env: NodeJS.ProcessEnv): string {
+  return join(umbelDataRoot(env), "store");
+}
+
 export function shimPath(env: NodeJS.ProcessEnv): string {
   return join(shimDir(env), "claude");
 }

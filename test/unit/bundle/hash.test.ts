@@ -107,4 +107,40 @@ describe("hashBundle", () => {
     const b = hashBundle(bundle({ name: "x", sourcePath: "/b", body: "bye" }), srcs());
     expect(a).toBe(b);
   });
+
+  it("store-pinned artifacts hash on commit+contentHash, not path or mtime", () => {
+    // Two ResolvedSources pointing at DIFFERENT absolute paths but the SAME pin
+    // must produce the same bundle hash (same lock → same bundle, any machine).
+    const mk = (dir: string): ResolvedSources => {
+      mkdirSync(dir, { recursive: true });
+      const s: ResolvedSources = {
+        skills: new Map([["tools/greet", dir]]),
+        agents: new Map(),
+        hooks: new Map(),
+        mcps: new Map(),
+        warnings: [],
+        storePins: new Map([
+          ["skills/tools/greet", { commit: "c".repeat(40), contentHash: "d".repeat(64) }],
+        ]),
+      };
+      return s;
+    };
+    const b = bundle({ skills: ["tools/greet"] });
+    expect(hashBundle(b, mk(join(root, "machine-a/store/x")))).toBe(
+      hashBundle(b, mk(join(root, "machine-b/store/y"))),
+    );
+  });
+
+  it("store pin change changes the hash", () => {
+    const mk = (hash: string): ResolvedSources => ({
+      skills: new Map([["tools/greet", join(root, "same")]]),
+      agents: new Map(),
+      hooks: new Map(),
+      mcps: new Map(),
+      warnings: [],
+      storePins: new Map([["skills/tools/greet", { commit: "c".repeat(40), contentHash: hash }]]),
+    });
+    const b = bundle({ skills: ["tools/greet"] });
+    expect(hashBundle(b, mk("1".repeat(64)))).not.toBe(hashBundle(b, mk("2".repeat(64))));
+  });
 });
