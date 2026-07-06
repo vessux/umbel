@@ -64,10 +64,14 @@ describe("runAdd", () => {
       root,
     );
     expect(code).toBe(0);
-    expect(readFileSync(lockPath, "utf8")).toBe(lockBefore);
-    expect(readFileSync(bundlePath, "utf8")).toBe(manifestBefore);
-    expect(statSync(lockPath).mtimeMs).toBe(lockMtime);
-    expect(statSync(bundlePath).mtimeMs).toBe(mdMtime);
+    const lockAfter = readFileSync(lockPath, "utf8");
+    const manifestAfter = readFileSync(bundlePath, "utf8");
+    const lockMtimeAfter = statSync(lockPath).mtimeMs;
+    const mdMtimeAfter = statSync(bundlePath).mtimeMs;
+    expect(lockAfter).toBe(lockBefore);
+    expect(manifestAfter).toBe(manifestBefore);
+    expect(lockMtimeAfter).toBe(lockMtime);
+    expect(mdMtimeAfter).toBe(mdMtime);
   });
 
   it("rejects an alias rebind to a different coordinate", () => {

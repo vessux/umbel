@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -10,23 +10,28 @@ import { join } from "node:path";
  */
 export function hashTree(root: string): string {
   const h = createHash("sha256");
-  for (const rel of walkSorted(root, "")) {
+  for (const { rel, isSymlink } of walkSorted(root, "")) {
     const full = join(root, rel);
-    const st = lstatSync(full);
-    if (st.isSymbolicLink()) {
+    if (isSymlink) {
       h.update(`l\0${rel}\0${readlinkSync(full)}\0`);
       continue;
     }
-    const exec = (st.mode & 0o111) !== 0 ? "x" : "-";
-    const data = readFileSync(full);
-    h.update(`f\0${rel}\0${exec}\0${data.length}\0`);
-    h.update(data);
+    const fd = openSync(full, "r");
+    try {
+      const st = fstatSync(fd);
+      const exec = (st.mode & 0o111) !== 0 ? "x" : "-";
+      const data = readFileSync(fd);
+      h.update(`f\0${rel}\0${exec}\0${data.length}\0`);
+      h.update(data);
+    } finally {
+      closeSync(fd);
+    }
   }
   return h.digest("hex");
 }
 
-function walkSorted(root: string, rel: string): string[] {
-  const out: string[] = [];
+function walkSorted(root: string, rel: string): { rel: string; isSymlink: boolean }[] {
+  const out: { rel: string; isSymlink: boolean }[] = [];
   const dir = rel === "" ? root : join(root, rel);
   const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
     a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
@@ -37,7 +42,7 @@ function walkSorted(root: string, rel: string): string[] {
     if (e.isDirectory()) {
       out.push(...walkSorted(root, childRel));
     } else {
-      out.push(childRel);
+      out.push({ rel: childRel, isSymlink: e.isSymbolicLink() });
     }
   }
   return out;
