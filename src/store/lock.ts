@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { UsageError } from "../errors.ts";
+import { ALIAS_RE } from "./coordinate.ts";
 
 export interface LockEntry {
   coordinate: string;
@@ -13,6 +14,9 @@ export interface LockFile {
 }
 
 export function lockPathFor(bundleMdPath: string): string {
+  if (!bundleMdPath.endsWith(".md")) {
+    throw new UsageError(`lock path: expected a .md bundle path, got '${bundleMdPath}'`);
+  }
   return bundleMdPath.replace(/\.md$/, ".lock");
 }
 
@@ -44,6 +48,9 @@ export function parseLock(raw: string, path: string): LockFile {
   }
   const deps: Record<string, LockEntry> = {};
   for (const [alias, v] of Object.entries(obj.deps as Record<string, unknown>)) {
+    if (!ALIAS_RE.test(alias)) {
+      throw new UsageError(`lock ${path}: invalid alias '${alias}'`);
+    }
     if (typeof v !== "object" || v === null) {
       throw new UsageError(`lock ${path}: deps.${alias} must be an object`);
     }
@@ -66,8 +73,9 @@ export function readLock(path: string): LockFile | null {
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
   }
   return parseLock(raw, path);
 }
