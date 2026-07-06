@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { NotFoundError, UsageError } from "../errors.ts";
+import { lockPathFor, readLock } from "../store/lock.ts";
 import { computeClaudeArgs } from "./claude-args.ts";
 import { compile } from "./compile.ts";
 import { type ResolvedBundle, compose, composeChain } from "./compose.ts";
@@ -10,6 +11,7 @@ import {
   bundleCacheRoot,
   projectBundlesDir,
   shimDir,
+  storeRootDir,
   stripFromPath,
   userBundlesDir,
 } from "./env.ts";
@@ -98,7 +100,13 @@ export function resolveBundle(
     }
   }
   const resolved = compose(name, ix, malformed);
-  const chain = new Set(composeChain(name, ix));
+  const chainNames = composeChain(name, ix);
+  if (chainNames.length > 1 && chainNames.some((n) => ix.get(n)?.deps !== undefined)) {
+    throw new UsageError(
+      `bundle '${name}': 'deps:' combined with 'extends' is not supported yet (resolve-then-merge lands in a later slice)`,
+    );
+  }
+  const chain = new Set(chainNames);
   const warnings = [
     ...new Set(
       index.entries
@@ -110,6 +118,15 @@ export function resolveBundle(
   const sources = resolveSources(resolved, {
     roots: artifactRoots(env),
     projectSkillsDir,
+    ...(resolved.deps !== undefined
+      ? {
+          store: {
+            deps: resolved.deps,
+            lock: readLock(lockPathFor(resolved.sourcePath)) ?? undefined,
+            root: storeRootDir(env),
+          },
+        }
+      : {}),
   });
   return { resolved, sources, warnings };
 }

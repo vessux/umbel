@@ -36,8 +36,15 @@ function bundleForHash(b: ResolvedBundle): Record<string, unknown> {
 function sourceLines(s: ResolvedSources): string[] {
   const lines: string[] = [];
   for (const kind of ARTIFACT_KINDS) {
-    for (const [name, path] of [...s[kind].entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      lines.push(`${kind}/${name}\t${path}\t${mtimeMs(path)}`);
+    for (const [name, path] of [...s[kind].entries()].sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    )) {
+      const pin = s.storePins?.get(`${kind}/${name}`);
+      if (pin) {
+        lines.push(`${kind}/${name}\tstore:${pin.commit}:${pin.contentHash}`);
+      } else {
+        lines.push(`${kind}/${name}\t${path}\t${mtimeMs(path)}`);
+      }
     }
   }
   return lines;

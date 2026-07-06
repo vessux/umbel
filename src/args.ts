@@ -15,6 +15,7 @@ Bundle verbs:
   umbel apply [name] [--vanilla]      Pin <project>/.umbel-bundle (use --vanilla for no bundle).
   umbel unpin                         Remove the project's pin file.
   umbel run [name] [-- ...]           Launch claude with bundle flags, or vanilla if no pin/picker chose so.
+  umbel add <coord> [leaf] [--bundle <name>]  Fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill.
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
   umbel shim install [--force]        Install the PATH shim (~/.local/share/umbel/bin/claude).
@@ -34,6 +35,7 @@ Env:
   UMBEL_ARTIFACTS_DIR  Override the artifact root (default: \$XDG_CONFIG_HOME/umbel).
   UMBEL_DATA_DIR       Override the generated-data root, home of the PATH shim (default: \$XDG_DATA_HOME/umbel).
   UMBEL_CACHE_DIR      Override compiled-bundle cache root (default: \$XDG_CACHE_HOME/umbel).
+  UMBEL_GITHUB_BASE    Override the github: coordinate host (default: https://github.com).
   UMBEL_BUNDLE         Used by 'run' name resolution (arg > env > pin). Set to "__vanilla__" to force vanilla.
   UMBEL_RESOLVED       Set automatically when 'umbel run' spawns claude; the shim short-circuits to vanilla if set.
   UMBEL_RESOLVED_DIR   Set by 'umbel run' on the bundle path: the resolved bundle's cache dir (for downstream tools).
@@ -51,6 +53,7 @@ export function helpText(): string {
 
 export const BUNDLE_VERBS = new Set([
   "run",
+  "add",
   "apply",
   "unpin",
   "list",

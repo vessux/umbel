@@ -49,4 +49,9 @@ describe("parseSubcommand", () => {
     const r = parseSubcommand(["bundle"]);
     expect(r.kind).toBe("error");
   });
+
+  it("recognizes 'add' as a bundle verb", () => {
+    const sub = parseSubcommand(["add", "github:a/b@v1"]);
+    expect(sub).toEqual({ kind: "verb", verb: "add", rest: ["github:a/b@v1"] });
+  });
 });

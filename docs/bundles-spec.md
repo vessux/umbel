@@ -826,3 +826,32 @@ umbel show data-science
 Composition has no `remove:` operator. To diverge, declare a sibling bundle
 that extends the same parents but skips the unwanted skill — re-pick the rest
 in the wizard. Forks favored over subtraction; keeps merge semantics simple.
+
+## Dependencies, lock & store (tracer slice)
+
+A bundle may declare versioned upstreams in `deps:` — an operator-chosen **alias**
+bound to a **coordinate** (ADR-0013). Composition refs keep the `<alias>/<leaf>`
+shape; a ref whose alias appears in `deps:` resolves through the **store**
+(`$XDG_DATA_HOME/umbel/store/github/<org>/<repo>/<commit>/`), all other refs
+resolve against the artifact pool as before.
+
+```yaml
+---
+name: dev
+deps:
+  tools: github:acme/tools@v1.0.0
+skills:
+  - tools/greet
+---
+```
+
+`umbel add github:<org>/<repo>@<tag> [leaf] [--bundle <name>]` fetches the repo
+into the store (atomic, content-addressed by commit), records the dep, and
+appends the skill ref with a comment-preserving manifest edit. The sibling
+`<name>.lock` pins each dependency to its resolved commit + a content hash of
+the checkout tree; for store-resolved artifacts the compile hash keys on that
+pin (not source mtimes), so the same lock produces the same compiled bundle on
+any machine. Re-running the same `add` is a no-op (no re-fetch, no lock churn).
+
+Tracer limits: `github:` pinned refs only; skills only (the hook/MCP trust gate
+is ADR-0014, a later slice); `deps:` cannot be combined with `extends:` yet.

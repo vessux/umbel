@@ -123,4 +123,109 @@ describe("resolveSources", () => {
     });
     expect(out.warnings).toEqual([]);
   });
+
+  describe("store-backed refs", () => {
+    // layout: <storeRoot>/github/acme/tools/<commit>/skills/greet/SKILL.md
+    const COMMIT = "c".repeat(40);
+    const HASH = "d".repeat(64);
+
+    function mkStore(root: string): { storeRoot: string; skillDir: string } {
+      const storeRoot = join(root, "store");
+      const skillDir = join(storeRoot, "github/acme/tools", COMMIT, "skills/greet");
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, "SKILL.md"), "---\nname: greet\n---\n");
+      return { storeRoot, skillDir };
+    }
+
+    const deps = { tools: "github:acme/tools@v1" };
+    const lock = {
+      version: 1 as const,
+      deps: { tools: { coordinate: "github:acme/tools@v1", commit: COMMIT, contentHash: HASH } },
+    };
+
+    it("resolves <alias>/<leaf> through deps + lock + store and records a pin", () => {
+      const { storeRoot, skillDir } = mkStore(root);
+      const out = resolveSources(bundle({ skills: ["tools/greet"] }), {
+        roots,
+        store: { deps, lock, root: storeRoot },
+      });
+      expect(out.skills.get("tools/greet")).toBe(skillDir);
+      expect(out.storePins?.get("skills/tools/greet")).toEqual({
+        commit: COMMIT,
+        contentHash: HASH,
+      });
+    });
+
+    it("falls back to the pool for refs whose alias is not in deps", () => {
+      const { storeRoot } = mkStore(root);
+      const poolDir = mkSubArtifact(roots.skills, "local", "tdd");
+      const out = resolveSources(bundle({ skills: ["local/tdd"] }), {
+        roots,
+        store: { deps, lock, root: storeRoot },
+      });
+      expect(out.skills.get("local/tdd")).toBe(poolDir);
+      expect(out.storePins?.has("skills/local/tdd")).toBeFalsy();
+    });
+
+    it("errors usefully when the dependency has no lock entry", () => {
+      const { storeRoot } = mkStore(root);
+      const err = thrown(() =>
+        resolveSources(bundle({ skills: ["tools/greet"] }), {
+          roots,
+          store: { deps, lock: undefined, root: storeRoot },
+        }),
+      );
+      expect(err.name).toBe("UsageError");
+      expect(err.message).toMatch(/not locked/);
+    });
+
+    it("errors NotFound when the locked checkout is missing from the store", () => {
+      const err = thrown(() =>
+        resolveSources(bundle({ skills: ["tools/greet"] }), {
+          roots,
+          store: { deps, lock, root: join(root, "empty-store") },
+        }),
+      );
+      expect(err.name).toBe("NotFoundError");
+      expect(err.message).toMatch(/store checkout missing/);
+    });
+
+    it("errors NotFound when the leaf is not in the checkout", () => {
+      const { storeRoot } = mkStore(root);
+      const err = thrown(() =>
+        resolveSources(bundle({ skills: ["tools/ghost"] }), {
+          roots,
+          store: { deps, lock, root: storeRoot },
+        }),
+      );
+      expect(err.name).toBe("NotFoundError");
+      expect(err.message).toMatch(/skill 'ghost' not found/);
+    });
+
+    it("store dir wins over a same-named pool source dir", () => {
+      const { storeRoot, skillDir } = mkStore(root);
+      mkSubArtifact(roots.skills, "tools", "greet");
+      const out = resolveSources(bundle({ skills: ["tools/greet"] }), {
+        roots,
+        store: { deps, lock, root: storeRoot },
+      });
+      expect(out.skills.get("tools/greet")).toBe(skillDir);
+      expect(out.storePins?.get("skills/tools/greet")).toEqual({
+        commit: COMMIT,
+        contentHash: HASH,
+      });
+    });
+
+    it("rejects store-backed non-skill kinds (trust gate pending)", () => {
+      const { storeRoot } = mkStore(root);
+      const err = thrown(() =>
+        resolveSources(bundle({ hooks: ["tools/hook1"] }), {
+          roots,
+          store: { deps, lock, root: storeRoot },
+        }),
+      );
+      expect(err.name).toBe("UsageError");
+      expect(err.message).toMatch(/not supported yet/);
+    });
+  });
 });

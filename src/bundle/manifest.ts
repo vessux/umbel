@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import matter from "gray-matter";
 import { UsageError } from "../errors.ts";
+import { ALIAS_RE } from "../store/coordinate.ts";
 
 /**
  * Internal type for the emitted settings.json `hooks` block.
@@ -44,6 +45,8 @@ export interface BundleManifest {
   name: string;
   description?: string;
   extends?: string[];
+  /** Dependency map: alias → coordinate (ADR-0013). Aliases are bundle-private. */
+  deps?: Record<string, string>;
   skills?: string[];
   agents?: string[];
   /** List of qualified `<source>/<leaf>` refs. */
@@ -101,6 +104,22 @@ export function loadManifest(path: string): ManifestResult {
       throw new UsageError(`bundle ${path}: 'extends' must be a list of names`);
     }
     manifest.extends = data.extends as string[];
+  }
+  if (data.deps !== undefined) {
+    if (typeof data.deps !== "object" || data.deps === null || Array.isArray(data.deps)) {
+      throw new UsageError(`bundle ${path}: 'deps' must be a map of alias → coordinate`);
+    }
+    for (const [alias, coord] of Object.entries(data.deps as Record<string, unknown>)) {
+      if (!ALIAS_RE.test(alias)) {
+        throw new UsageError(
+          `bundle ${path}: deps.${alias} is not a valid alias (must match ${ALIAS_RE.source})`,
+        );
+      }
+      if (typeof coord !== "string" || coord.length === 0) {
+        throw new UsageError(`bundle ${path}: deps.${alias} coordinate must be a string`);
+      }
+    }
+    manifest.deps = data.deps as Record<string, string>;
   }
   if (data.skills !== undefined) {
     if (!Array.isArray(data.skills) || !data.skills.every((s) => typeof s === "string")) {
@@ -178,6 +197,7 @@ const KNOWN_FIELDS = new Set([
   "name",
   "description",
   "extends",
+  "deps",
   "skills",
   "agents",
   "hooks",

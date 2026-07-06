@@ -85,7 +85,9 @@ function linearize(
 
 function mergePair(parent: ResolvedBundle, child: BundleManifest): ResolvedBundle {
   const childPlain = stripExtends(child);
-  const out: ResolvedBundle = { ...parent };
+  // deps aliases are bundle-private, never inherited (ADR-0013)
+  const { deps: _parentDeps, ...parentRest } = parent;
+  const out: ResolvedBundle = { ...parentRest };
 
   // Child scalars / metadata override parent for these fields.
   if (childPlain.name !== undefined) out.name = childPlain.name;
@@ -93,6 +95,7 @@ function mergePair(parent: ResolvedBundle, child: BundleManifest): ResolvedBundl
   if (childPlain.body !== undefined) out.body = childPlain.body;
   if (childPlain.description !== undefined) out.description = childPlain.description;
   if (childPlain.mergeMcp !== undefined) out.mergeMcp = childPlain.mergeMcp;
+  if (childPlain.deps !== undefined) out.deps = childPlain.deps;
 
   for (const f of ARTIFACT_KINDS) {
     const merged = mergeStringList(parent[f], childPlain[f]);
