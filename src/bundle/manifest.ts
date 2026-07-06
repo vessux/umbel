@@ -112,7 +112,7 @@ export function loadManifest(path: string): ManifestResult {
     for (const [alias, coord] of Object.entries(data.deps as Record<string, unknown>)) {
       if (!ALIAS_RE.test(alias)) {
         throw new UsageError(
-          `bundle ${path}: deps alias '${alias}' is invalid (must match ${ALIAS_RE.source})`,
+          `bundle ${path}: deps.${alias} is not a valid alias (must match ${ALIAS_RE.source})`,
         );
       }
       if (typeof coord !== "string" || coord.length === 0) {

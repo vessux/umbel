@@ -277,6 +277,11 @@ plugins: [foo]
     expect(() => loadManifest(path)).toThrow(/alias/i);
   });
 
+  it("rejects a __proto__ deps alias", () => {
+    const path = writeBundle("dev", "---\nname: dev\ndeps:\n  __proto__: github:a/b@v1\n---\n");
+    expect(() => loadManifest(path)).toThrow(/alias/i);
+  });
+
   it("rejects a non-string deps coordinate", () => {
     const path = writeBundle("dev", "---\nname: dev\ndeps:\n  tools: 3\n---\n");
     expect(() => loadManifest(path)).toThrow(/coordinate/i);

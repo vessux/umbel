@@ -184,12 +184,12 @@ describe("compose", () => {
     expect(compose("child", ix).deps).toEqual({ b: "github:x/b@v1" });
   });
 
-  it("deps: parent map survives when child declares none", () => {
+  it("deps: parent map is not inherited when child declares none", () => {
     const ix = index(
       m("base", { deps: { a: "github:x/a@v1" } }),
       m("child", { extends: ["base"] }),
     );
-    expect(compose("child", ix).deps).toEqual({ a: "github:x/a@v1" });
+    expect(compose("child", ix).deps).toBeUndefined();
   });
 });
 

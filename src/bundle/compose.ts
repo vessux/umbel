@@ -85,7 +85,9 @@ function linearize(
 
 function mergePair(parent: ResolvedBundle, child: BundleManifest): ResolvedBundle {
   const childPlain = stripExtends(child);
-  const out: ResolvedBundle = { ...parent };
+  // deps aliases are bundle-private, never inherited (ADR-0013)
+  const { deps: _parentDeps, ...parentRest } = parent;
+  const out: ResolvedBundle = { ...parentRest };
 
   // Child scalars / metadata override parent for these fields.
   if (childPlain.name !== undefined) out.name = childPlain.name;
