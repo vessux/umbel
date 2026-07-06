@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, readFileSync, readdirSync, utimesSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { makeGitFixture } from "../helpers/git.ts";
 import { cleanup, makeTmpDir, writeFile } from "../helpers/tmp.ts";
 
-const CLI = join(process.cwd(), "dist", "cli.js");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const CLI = join(ROOT, "dist", "cli.js");
 
 describe("umbel add (integration)", () => {
   let root: string;
@@ -86,6 +88,8 @@ describe("umbel add (integration)", () => {
 
     // 2) relocating the store (a "different machine") must not change the hash
     cpSync(join(root, "data"), join(root, "data-elsewhere"), { recursive: true });
+    // Footgun: this permanently repoints later umbel() calls in this file at the
+    // relocated store — any test added after this one inherits UMBEL_DATA_DIR=data-elsewhere.
     env = { ...env, UMBEL_DATA_DIR: join(root, "data-elsewhere") };
     expect(build()).toBe(first);
   });

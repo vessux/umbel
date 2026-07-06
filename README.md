@@ -178,6 +178,7 @@ umbel build [name] [--no-cache]         # warm cache, print path
 umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cache (--vanilla = pin "no bundle")
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
+umbel add <coord> [leaf] [--bundle <name>]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
@@ -331,6 +332,7 @@ Rows start checked iff currently installed correctly.
 | `UMBEL_CACHE_DIR`     | Override compiled-bundle cache root (default: `$XDG_CACHE_HOME/umbel`). |
 | `UMBEL_BUNDLE`        | Used by `run` resolution (arg > env > pin). `__vanilla__` forces vanilla. |
 | `UMBEL_RESOLVED`      | Set by `umbel run` when spawning claude. The shim short-circuits to vanilla when present, so subprocess shellouts to `claude` don't re-prompt. |
+| `UMBEL_GITHUB_BASE`   | Override the `github:` coordinate host (default: `https://github.com`). |
 | `NO_COLOR`            | Disable ANSI color (icons retained).                                    |
 
 ## Exit codes
