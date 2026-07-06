@@ -199,6 +199,21 @@ describe("resolveSources", () => {
         }),
       );
       expect(err.name).toBe("NotFoundError");
+      expect(err.message).toMatch(/skill 'ghost' not found/);
+    });
+
+    it("store dir wins over a same-named pool source dir", () => {
+      const { storeRoot, skillDir } = mkStore(root);
+      mkSubArtifact(roots.skills, "tools", "greet");
+      const out = resolveSources(bundle({ skills: ["tools/greet"] }), {
+        roots,
+        store: { deps, lock, root: storeRoot },
+      });
+      expect(out.skills.get("tools/greet")).toBe(skillDir);
+      expect(out.storePins?.get("skills/tools/greet")).toEqual({
+        commit: COMMIT,
+        contentHash: HASH,
+      });
     });
 
     it("rejects store-backed non-skill kinds (trust gate pending)", () => {

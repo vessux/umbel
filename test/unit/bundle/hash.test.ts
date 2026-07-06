@@ -143,4 +143,17 @@ describe("hashBundle", () => {
     const b = bundle({ skills: ["tools/greet"] });
     expect(hashBundle(b, mk("1".repeat(64)))).not.toBe(hashBundle(b, mk("2".repeat(64))));
   });
+
+  it("store pin commit change changes the hash even with the same contentHash", () => {
+    const mk = (commit: string): ResolvedSources => ({
+      skills: new Map([["tools/greet", join(root, "same")]]),
+      agents: new Map(),
+      hooks: new Map(),
+      mcps: new Map(),
+      warnings: [],
+      storePins: new Map([["skills/tools/greet", { commit, contentHash: "d".repeat(64) }]]),
+    });
+    const b = bundle({ skills: ["tools/greet"] });
+    expect(hashBundle(b, mk("a".repeat(40)))).not.toBe(hashBundle(b, mk("b".repeat(40))));
+  });
 });
