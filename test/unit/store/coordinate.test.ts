@@ -44,6 +44,11 @@ describe("parseCoordinate", () => {
     }
   });
 
+  it("rejects . and .. org/repo segments", () => {
+    expect(() => parseCoordinate("github:../..@v1")).toThrowError(UsageError);
+    expect(() => parseCoordinate("github:acme/..@v1")).toThrowError(UsageError);
+  });
+
   it("rejects an unknown coordinate shape", () => {
     expect(() => parseCoordinate("https://github.com/acme/tools")).toThrowError(UsageError);
   });
@@ -74,5 +79,9 @@ describe("deriveAlias", () => {
 
   it("rejects a repo that sanitizes to an invalid alias", () => {
     expect(() => deriveAlias(parseCoordinate("github:acme/---@v1"))).toThrowError(UsageError);
+  });
+
+  it("rejects an alias that does not start with a letter", () => {
+    expect(() => deriveAlias(parseCoordinate("github:acme/3d-tools@v1"))).toThrowError(UsageError);
   });
 });

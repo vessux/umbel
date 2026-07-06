@@ -43,6 +43,9 @@ export function parseCoordinate(raw: string): Coordinate {
   if (!NAME_PART_RE.test(org) || !NAME_PART_RE.test(repo)) {
     throw new UsageError(`coordinate '${raw}': invalid org/repo (allowed: letters, digits, . _ -)`);
   }
+  if (org === "." || org === ".." || repo === "." || repo === "..") {
+    throw new UsageError(`coordinate '${raw}': org/repo must not be '.' or '..'`);
+  }
   if (ref.length === 0 || /\s/.test(ref)) {
     throw new UsageError(`coordinate '${raw}': invalid ref`);
   }
