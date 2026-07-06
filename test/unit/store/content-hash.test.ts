@@ -57,6 +57,29 @@ describe("hashTree", () => {
     expect(hashTree(a)).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("does not collide when content bytes mimic frame boundaries", () => {
+    const a = join(root, "a");
+    const b = join(root, "b");
+    const c1 = Buffer.from("C1");
+    const c2 = Buffer.from("C2");
+    mkdirSync(b, { recursive: true });
+    writeFileSync(join(b, "a"), c1);
+    writeFileSync(join(b, "b"), c2);
+    mkdirSync(a, { recursive: true });
+    writeFileSync(join(a, "a"), Buffer.concat([c1, Buffer.from("\0f\0b\0-\0"), c2]));
+    expect(hashTree(a)).not.toBe(hashTree(b));
+  });
+
+  it("changes when a symlink target changes", () => {
+    const a = join(root, "a");
+    const b = join(root, "b");
+    mkdirSync(a, { recursive: true });
+    mkdirSync(b, { recursive: true });
+    symlinkSync("/target-one", join(a, "ln"));
+    symlinkSync("/target-two", join(b, "ln"));
+    expect(hashTree(a)).not.toBe(hashTree(b));
+  });
+
   it("ignores a .git directory", () => {
     const a = join(root, "a");
     const b = join(root, "b");

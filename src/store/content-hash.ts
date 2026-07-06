@@ -18,9 +18,9 @@ export function hashTree(root: string): string {
       continue;
     }
     const exec = (st.mode & 0o111) !== 0 ? "x" : "-";
-    h.update(`f\0${rel}\0${exec}\0`);
-    h.update(readFileSync(full));
-    h.update("\0");
+    const data = readFileSync(full);
+    h.update(`f\0${rel}\0${exec}\0${data.length}\0`);
+    h.update(data);
   }
   return h.digest("hex");
 }
