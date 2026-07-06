@@ -92,6 +92,24 @@ describe("lock", () => {
     ).toThrowError(UsageError);
   });
 
+  it("parseLock rejects a traversal-shaped commit", () => {
+    expect(() =>
+      parseLock(
+        `{"version":1,"deps":{"a":{"coordinate":"github:acme/a@v1","commit":"../../../../x","contentHash":"${"1".repeat(64)}"}}}`,
+        "/x/dev.lock",
+      ),
+    ).toThrowError(UsageError);
+  });
+
+  it("parseLock rejects a short contentHash", () => {
+    expect(() =>
+      parseLock(
+        `{"version":1,"deps":{"a":{"coordinate":"github:acme/a@v1","commit":"${"a".repeat(40)}","contentHash":"abc123"}}}`,
+        "/x/dev.lock",
+      ),
+    ).toThrowError(UsageError);
+  });
+
   it("parseLock rejects aliases outside the alias grammar", () => {
     expect(() =>
       parseLock(

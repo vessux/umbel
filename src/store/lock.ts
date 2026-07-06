@@ -2,6 +2,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { UsageError } from "../errors.ts";
 import { ALIAS_RE } from "./coordinate.ts";
 
+const COMMIT_RE = /^[0-9a-f]{7,64}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+
 export interface LockEntry {
   coordinate: string;
   commit: string;
@@ -55,10 +58,14 @@ export function parseLock(raw: string, path: string): LockFile {
       throw new UsageError(`lock ${path}: deps.${alias} must be an object`);
     }
     const e = v as Record<string, unknown>;
-    for (const field of ["coordinate", "commit", "contentHash"] as const) {
-      if (typeof e[field] !== "string" || e[field].length === 0) {
-        throw new UsageError(`lock ${path}: deps.${alias}.${field} must be a non-empty string`);
-      }
+    if (typeof e.coordinate !== "string" || e.coordinate.length === 0) {
+      throw new UsageError(`lock ${path}: deps.${alias}.coordinate must be a non-empty string`);
+    }
+    if (typeof e.commit !== "string" || !COMMIT_RE.test(e.commit)) {
+      throw new UsageError(`lock ${path}: deps.${alias}.commit must be a hex commit id`);
+    }
+    if (typeof e.contentHash !== "string" || !SHA256_RE.test(e.contentHash)) {
+      throw new UsageError(`lock ${path}: deps.${alias}.contentHash must be a 64-hex sha256`);
     }
     deps[alias] = {
       coordinate: e.coordinate as string,
