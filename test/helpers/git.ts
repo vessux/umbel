@@ -14,7 +14,12 @@ function git(cwd: string, ...args: string[]): void {
  * Create a real git repo at `dir` with `files`, one commit, tagged `tag`.
  * Returns the commit sha. Clone it via `file://${dir}`.
  */
-export function makeGitFixture(dir: string, files: Record<string, string>, tag = "v1"): string {
+export function makeGitFixture(
+  dir: string,
+  files: Record<string, string>,
+  tag = "v1",
+  annotated = false,
+): string {
   mkdirSync(dir, { recursive: true });
   git(dir, "init", "-q", "-b", "main");
   git(dir, "config", "user.email", "test@test");
@@ -26,7 +31,11 @@ export function makeGitFixture(dir: string, files: Record<string, string>, tag =
   }
   git(dir, "add", "-A");
   git(dir, "commit", "-q", "-m", "fixture");
-  git(dir, "tag", tag);
+  if (annotated) {
+    git(dir, "tag", "-a", tag, "-m", tag);
+  } else {
+    git(dir, "tag", tag);
+  }
   const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" });
   return r.stdout.trim();
 }

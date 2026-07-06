@@ -59,8 +59,15 @@ export function ensureCheckout(opts: EnsureOpts): Checkout {
     if (!existsSync(dir)) {
       // The rename is the atomicity stake: a concurrent winner makes existsSync(dir)
       // true first, so this run keeps the existing dir and discards its own staging below.
+      // A winner staking between the check and the rename surfaces as ENOTEMPTY/EEXIST —
+      // same outcome, the existing dir wins.
       mkdirSync(dirname(dir), { recursive: true });
-      renameSync(staging, dir);
+      try {
+        renameSync(staging, dir);
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code !== "ENOTEMPTY" && code !== "EEXIST") throw e;
+      }
     }
     return { commit, contentHash: hashTree(dir), dir };
   } finally {
@@ -69,7 +76,10 @@ export function ensureCheckout(opts: EnsureOpts): Checkout {
 }
 
 function git(args: string[], coord: Coordinate): string {
-  const r = spawnSync("git", args, { encoding: "utf8" });
+  const r = spawnSync("git", args, {
+    encoding: "utf8",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
   if (r.error && (r.error as NodeJS.ErrnoException).code === "ENOENT") {
     throw new CliError("umbel: 'git' not found on PATH", 1);
   }

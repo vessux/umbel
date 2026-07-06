@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, utimesSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NotFoundError } from "../../../src/errors.ts";
@@ -42,8 +42,6 @@ describe("ensureCheckout", () => {
 
   it("is a pure local no-op when lockedCommit's checkout exists (no re-fetch)", () => {
     const first = ensureCheckout({ coord: coord(), url: `file://${repoDir}`, storeRoot });
-    const old = new Date(2000, 0, 1);
-    utimesSync(first.dir, old, old);
     // A bogus URL proves no network/clone happens on the locked path.
     const second = ensureCheckout({
       coord: coord(),
@@ -63,6 +61,17 @@ describe("ensureCheckout", () => {
       lockedCommit: commit,
     });
     expect(out.commit).toBe(commit);
+  });
+
+  it("resolves an annotated tag to the commit sha, not the tag object", () => {
+    const annotatedRepo = join(root, "fixtures", "acme", "annotated");
+    const annotatedCommit = makeGitFixture(annotatedRepo, { "a.txt": "a\n" }, "v1", true);
+    const out = ensureCheckout({
+      coord: coord(),
+      url: `file://${annotatedRepo}`,
+      storeRoot,
+    });
+    expect(out.commit).toBe(annotatedCommit);
   });
 
   it("throws NotFoundError with git's stderr on a missing ref", () => {
