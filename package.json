@@ -58,7 +58,7 @@
     "yaml": "^2.8.4"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.5.2",
     "@types/node": "^22.0.0",
     "knip": "^5.88.1",
     "tsup": "^8.3.0",
