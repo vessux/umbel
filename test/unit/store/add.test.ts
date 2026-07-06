@@ -1,10 +1,19 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runAdd } from "../../../src/store/add.ts";
 import { readLock } from "../../../src/store/lock.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
 import { cleanup, makeTmpDir, writeFile } from "../../helpers/tmp.ts";
+
+function snapshotFile(path: string): { content: string; mtimeMs: number } {
+  const fd = openSync(path, "r");
+  try {
+    return { content: readFileSync(fd, "utf8"), mtimeMs: fstatSync(fd).mtimeMs };
+  } finally {
+    closeSync(fd);
+  }
+}
 
 describe("runAdd", () => {
   let root: string;
@@ -53,10 +62,8 @@ describe("runAdd", () => {
   it("is idempotent: second run rewrites nothing and touches no network", () => {
     runAdd(["github:acme/tools@v1", "greet", "--bundle", "dev"], env, root);
     const lockPath = join(root, "config/bundles/dev.lock");
-    const lockBefore = readFileSync(lockPath, "utf8");
-    const manifestBefore = readFileSync(bundlePath, "utf8");
-    const lockMtime = statSync(lockPath).mtimeMs;
-    const mdMtime = statSync(bundlePath).mtimeMs;
+    const lockBefore = snapshotFile(lockPath);
+    const manifestBefore = snapshotFile(bundlePath);
     // Poison the upstream URL: an idempotent re-add must not touch the network.
     const code = runAdd(
       ["github:acme/tools@v1", "greet", "--bundle", "dev"],
@@ -64,14 +71,12 @@ describe("runAdd", () => {
       root,
     );
     expect(code).toBe(0);
-    const lockAfter = readFileSync(lockPath, "utf8");
-    const manifestAfter = readFileSync(bundlePath, "utf8");
-    const lockMtimeAfter = statSync(lockPath).mtimeMs;
-    const mdMtimeAfter = statSync(bundlePath).mtimeMs;
-    expect(lockAfter).toBe(lockBefore);
-    expect(manifestAfter).toBe(manifestBefore);
-    expect(lockMtimeAfter).toBe(lockMtime);
-    expect(mdMtimeAfter).toBe(mdMtime);
+    const lockAfter = snapshotFile(lockPath);
+    const manifestAfter = snapshotFile(bundlePath);
+    expect(lockAfter.content).toBe(lockBefore.content);
+    expect(manifestAfter.content).toBe(manifestBefore.content);
+    expect(lockAfter.mtimeMs).toBe(lockBefore.mtimeMs);
+    expect(manifestAfter.mtimeMs).toBe(manifestBefore.mtimeMs);
   });
 
   it("rejects an alias rebind to a different coordinate", () => {
