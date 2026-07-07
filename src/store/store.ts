@@ -37,23 +37,31 @@ export function ensureCheckout(opts: EnsureOpts): Checkout {
     `.staging-${process.pid}-${Math.random().toString(36).slice(2, 10)}`,
   );
   try {
-    git(
-      [
-        "clone",
-        "--quiet",
-        "--config",
-        "core.autocrlf=false",
-        "--depth",
-        "1",
-        "--branch",
-        opts.coord.ref,
-        "--single-branch",
-        opts.url,
-        staging,
-      ],
-      opts.coord,
-    );
-    const commit = git(["-C", staging, "rev-parse", "HEAD"], opts.coord).trim();
+    let commit: string;
+    if (opts.lockedCommit) {
+      // A ref-tip shallow clone can't reach a moved/older commit
+      // ("fatal: reference is not a tree"), so fetch the pinned commit directly.
+      fetchExactCommit(opts.url, opts.lockedCommit, staging, opts.coord);
+      commit = opts.lockedCommit;
+    } else {
+      git(
+        [
+          "clone",
+          "--quiet",
+          "--config",
+          "core.autocrlf=false",
+          "--depth",
+          "1",
+          "--branch",
+          opts.coord.ref,
+          "--single-branch",
+          opts.url,
+          staging,
+        ],
+        opts.coord,
+      );
+      commit = git(["-C", staging, "rev-parse", "HEAD"], opts.coord).trim();
+    }
     rmSync(join(staging, ".git"), { recursive: true, force: true });
     const dir = checkoutPath(opts.storeRoot, opts.coord, commit);
     if (!existsSync(dir)) {
@@ -88,4 +96,21 @@ function git(args: string[], coord: Coordinate): string {
     throw new NotFoundError(`failed to fetch ${coord.raw}:\n${detail}`);
   }
   return r.stdout;
+}
+
+/**
+ * Fetch a single, exact commit into `staging` (already a nonexistent path).
+ * Used to materialize a locked pin: unlike a ref-tip clone, this reaches a
+ * commit that a moved branch/tag no longer points at (GitHub allows fetching
+ * any reachable sha; local file transport allows it too).
+ */
+function fetchExactCommit(url: string, commit: string, staging: string, coord: Coordinate): void {
+  git(["init", "--quiet", staging], coord);
+  git(["-C", staging, "config", "core.autocrlf", "false"], coord);
+  git(["-C", staging, "remote", "add", "origin", url], coord);
+  git(["-C", staging, "fetch", "--quiet", "--depth", "1", "origin", commit], coord);
+  git(
+    ["-C", staging, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+    coord,
+  );
 }

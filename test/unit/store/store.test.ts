@@ -1,4 +1,5 @@
-import { existsSync, readdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NotFoundError } from "../../../src/errors.ts";
@@ -61,6 +62,32 @@ describe("ensureCheckout", () => {
       lockedCommit: commit,
     });
     expect(out.commit).toBe(commit);
+  });
+
+  it("materializes the exact locked commit even after the branch advanced past it", () => {
+    const movedRepo = join(root, "fixtures", "acme", "moved");
+    const c1 = makeGitFixture(movedRepo, {
+      "skills/greet/SKILL.md": "---\nname: greet\n---\nv1\n",
+    });
+    // advance main past the locked commit
+    writeFileSync(join(movedRepo, "skills/greet/SKILL.md"), "---\nname: greet\n---\nv2\n");
+    execFileSync("git", ["-C", movedRepo, "commit", "-qam", "c2"]);
+    const c2 = execFileSync("git", ["-C", movedRepo, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    expect(c1).not.toBe(c2);
+
+    const branch = parseCoordinate("github:acme/moved@main"); // ref tip is now c2
+    const out = ensureCheckout({
+      coord: branch,
+      url: `file://${movedRepo}`,
+      storeRoot,
+      lockedCommit: c1,
+    });
+    expect(out.commit).toBe(c1);
+    const dir = checkoutPath(storeRoot, branch, c1);
+    expect(existsSync(join(dir, "skills/greet/SKILL.md"))).toBe(true);
+    expect(readFileSync(join(dir, "skills/greet/SKILL.md"), "utf8")).toContain("v1");
   });
 
   it("resolves an annotated tag to the commit sha, not the tag object", () => {
