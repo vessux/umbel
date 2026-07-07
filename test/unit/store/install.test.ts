@@ -52,10 +52,20 @@ describe("reconcile (non-frozen)", () => {
     const lock = {
       version: 1 as const,
       deps: {
-        tools: { coordinate: "github:acme/tools@v1", commit: toolsCommit, contentHash: "a".repeat(64) },
+        tools: {
+          coordinate: "github:acme/tools@v1",
+          commit: toolsCommit,
+          contentHash: "a".repeat(64),
+        },
       },
     };
-    const r = reconcile({ deps: { tools: "github:acme/tools@v1" }, lock, storeRoot, env, frozen: false });
+    const r = reconcile({
+      deps: { tools: "github:acme/tools@v1" },
+      lock,
+      storeRoot,
+      env,
+      frozen: false,
+    });
     expect(r.changed).toBe(false);
     expect(r.kept).toEqual(["tools"]);
     // commit + contentHash carried verbatim (not re-hashed, not bumped)
@@ -66,11 +76,21 @@ describe("reconcile (non-frozen)", () => {
     const lock = {
       version: 1 as const,
       deps: {
-        tools: { coordinate: "github:acme/tools@v1", commit: toolsCommit, contentHash: "a".repeat(64) },
+        tools: {
+          coordinate: "github:acme/tools@v1",
+          commit: toolsCommit,
+          contentHash: "a".repeat(64),
+        },
         lib: { coordinate: "github:acme/lib@v1", commit: libCommit, contentHash: "b".repeat(64) },
       },
     };
-    const r = reconcile({ deps: { tools: "github:acme/tools@v1" }, lock, storeRoot, env, frozen: false });
+    const r = reconcile({
+      deps: { tools: "github:acme/tools@v1" },
+      lock,
+      storeRoot,
+      env,
+      frozen: false,
+    });
     expect(r.changed).toBe(true);
     expect(r.removed).toEqual(["lib"]);
     expect(Object.keys(r.lock.deps)).toEqual(["tools"]);
@@ -84,7 +104,11 @@ describe("reconcile (non-frozen)", () => {
     const lock = {
       version: 1 as const,
       deps: {
-        tools: { coordinate: "github:acme/tools@v1", commit: toolsCommit, contentHash: "a".repeat(64) },
+        tools: {
+          coordinate: "github:acme/tools@v1",
+          commit: toolsCommit,
+          contentHash: "a".repeat(64),
+        },
         lib: { coordinate: "github:acme/lib@v1", commit: libCommit, contentHash: "b".repeat(64) },
       },
     };
@@ -130,7 +154,13 @@ describe("reconcile (frozen)", () => {
 
   it("errors when the manifest has a dep missing from the lock", () => {
     expect(() =>
-      reconcile({ deps: { tools: "github:acme/tools@v1" }, lock: null, storeRoot, env, frozen: true }),
+      reconcile({
+        deps: { tools: "github:acme/tools@v1" },
+        lock: null,
+        storeRoot,
+        env,
+        frozen: true,
+      }),
     ).toThrow(/frozen/i);
   });
 
@@ -142,7 +172,13 @@ describe("reconcile (frozen)", () => {
 
   it("errors when a coordinate differs between manifest and lock", () => {
     expect(() =>
-      reconcile({ deps: { tools: "github:acme/tools@v2" }, lock: lockOf(), storeRoot, env, frozen: true }),
+      reconcile({
+        deps: { tools: "github:acme/tools@v2" },
+        lock: lockOf(),
+        storeRoot,
+        env,
+        frozen: true,
+      }),
     ).toThrow(/coordinate|drift/i);
   });
 
@@ -158,7 +194,13 @@ describe("reconcile (frozen)", () => {
     }).lock;
     rmSync(storeRoot, { recursive: true, force: true });
 
-    const r = reconcile({ deps: { tools: "github:acme/tools@v1" }, lock: real, storeRoot, env, frozen: true });
+    const r = reconcile({
+      deps: { tools: "github:acme/tools@v1" },
+      lock: real,
+      storeRoot,
+      env,
+      frozen: true,
+    });
     expect(r.changed).toBe(false);
     expect(r.lock).toBe(real); // same object, unmodified
     expect(

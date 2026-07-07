@@ -110,7 +110,16 @@ function fetchExactCommit(url: string, commit: string, staging: string, coord: C
   git(["-C", staging, "remote", "add", "origin", url], coord);
   git(["-C", staging, "fetch", "--quiet", "--depth", "1", "origin", commit], coord);
   git(
-    ["-C", staging, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", "FETCH_HEAD"],
+    [
+      "-C",
+      staging,
+      "-c",
+      "advice.detachedHead=false",
+      "checkout",
+      "--quiet",
+      "--detach",
+      "FETCH_HEAD",
+    ],
     coord,
   );
 }
