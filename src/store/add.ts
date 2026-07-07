@@ -135,7 +135,12 @@ function parseAddArgs(rest: string[]): {
   };
 }
 
-function resolveTargetBundle(index: BundleIndex, bundleFlag: string | undefined, cwd: string) {
+export function resolveTargetBundle(
+  index: BundleIndex,
+  bundleFlag: string | undefined,
+  cwd: string,
+  verb = "add",
+) {
   let name = bundleFlag;
   if (name === undefined) {
     const pin = readPin(cwd, homedir());
@@ -144,15 +149,15 @@ function resolveTargetBundle(index: BundleIndex, bundleFlag: string | undefined,
   }
   if (name === undefined) {
     throw new UsageError(
-      "umbel add: no target bundle (pass --bundle <name>, or pin one with 'umbel apply <name>')",
+      `umbel ${verb}: no target bundle (pass --bundle <name>, or pin one with 'umbel apply <name>')`,
     );
   }
   const entry = index.entries.find((e) => e.name === name && !e.shadowed);
   if (entry === undefined) {
-    throw new UsageError(`umbel add: bundle '${name}' not found`);
+    throw new UsageError(`umbel ${verb}: bundle '${name}' not found`);
   }
   if (entry.malformed || entry.manifest === undefined) {
-    throw new UsageError(entry.error ?? `umbel add: bundle '${name}' is malformed`);
+    throw new UsageError(entry.error ?? `umbel ${verb}: bundle '${name}' is malformed`);
   }
   return entry;
 }

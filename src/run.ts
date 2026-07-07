@@ -42,6 +42,7 @@ import { disambiguateSkills } from "./source/disambiguate.ts";
 import { scanSource } from "./source/scan.ts";
 import { probeAll } from "./state/probe.ts";
 import { runAdd } from "./store/add.ts";
+import { runInstall } from "./store/install.ts";
 import { resolveInteractiveTargets, targetFromOverride } from "./target/resolve.ts";
 import type { Capabilities, Options, Target } from "./types.ts";
 import { runInitWizard } from "./ui/bundle-init.ts";
@@ -112,6 +113,7 @@ async function runBundleVerb(
   if (verb === "unpin") return runBundleUnpin(cwd);
   if (verb === "run") return runBundleRun(rest, env, cwd);
   if (verb === "add") return runAdd(rest, env, cwd);
+  if (verb === "install") return runInstall(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
   return runBundleInit(env, cwd);
@@ -426,7 +428,7 @@ function buildBundle(
   env: NodeJS.ProcessEnv,
   forceRebuild = false,
 ): { cacheDir: string; warnings: string[] } {
-  const { resolved, sources, warnings } = resolveBundle(name, index, env);
+  const { resolved, sources, warnings } = resolveBundle(name, index, env, { materialize: true });
   const { cacheDir } = compile(resolved, sources, {
     cacheRoot: bundleCacheRoot(env),
     forceRebuild,

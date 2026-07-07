@@ -110,13 +110,13 @@ function resolveViaStore(
   const entry = store.lock?.deps[alias];
   if (!entry) {
     throw new UsageError(
-      `bundle '${bundleName}': dependency '${alias}' is not locked; run 'umbel add ${depCoord}'`,
+      `bundle '${bundleName}': dependency '${alias}' (${depCoord}) is not locked; run 'umbel install'`,
     );
   }
   const checkout = checkoutPath(store.root, parseCoordinate(entry.coordinate), entry.commit);
   if (!isDir(checkout)) {
     throw new NotFoundError(
-      `bundle '${bundleName}': store checkout missing for '${alias}' (${entry.commit.slice(0, 12)}); re-run 'umbel add ${depCoord}'`,
+      `bundle '${bundleName}': store checkout missing for '${alias}' (${entry.commit.slice(0, 12)}); run 'umbel install'`,
     );
   }
   const dir = skillDirIn(checkout, leaf);

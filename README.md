@@ -179,6 +179,7 @@ umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cac
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel add <coord> [leaf] [--bundle <name>]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
+umbel install [--frozen] [--bundle <name>]  # reconcile deps ↔ lock + fetch (--frozen: strict, reproducible, writes nothing)
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
@@ -186,6 +187,14 @@ umbel shim uninstall                    # remove the shim
 umbel shim path                         # print the shim's absolute path
 umbel skills [options]                  # low-level skill installer (v0 picker)
 ```
+
+Share a bundle thin by committing `bundle.md` + its sibling `<name>.lock`: a
+recipient runs `umbel install --frozen` to fetch exactly the locked commits,
+which errors (exit 2) on any manifest/lock drift. Plain `umbel install`
+reconciles a hand-edited `deps:` into the lock (resolving new/changed
+dependencies, keeping existing pins, dropping removed ones) without ever
+bumping a pin — that is `umbel update`'s job. `run` / `apply` / `build`
+auto-materialize any missing store checkouts before compiling.
 
 When invoked without `[name]` on a TTY, `run` / `apply` / `show` / `build`
 open a picker — **full** or **scoped**, depending on the pin:

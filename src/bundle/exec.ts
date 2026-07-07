@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { NotFoundError, UsageError } from "../errors.ts";
+import { materializeFromLock } from "../store/install.ts";
 import { lockPathFor, readLock } from "../store/lock.ts";
 import { computeClaudeArgs } from "./claude-args.ts";
 import { compile } from "./compile.ts";
@@ -78,6 +79,7 @@ export function resolveBundle(
   name: string,
   index: BundleIndex,
   env: NodeJS.ProcessEnv,
+  opts?: { materialize?: boolean },
 ): { resolved: ResolvedBundle; sources: ResolvedSources; warnings: string[] } {
   const ix = new Map<string, BundleManifest>();
   for (const e of index.entries) {
@@ -114,18 +116,19 @@ export function resolveBundle(
         .flatMap((e) => e.warnings ?? []),
     ),
   ];
+  const lock = resolved.deps !== undefined ? readLock(lockPathFor(resolved.sourcePath)) : null;
+  if (resolved.deps !== undefined && opts?.materialize) {
+    // run/apply/build auto-materialize: fetch any missing locked checkouts
+    // before compiling. Consumes the lock as-is; does not rewrite it.
+    materializeFromLock(lock, storeRootDir(env), env);
+  }
+
   const projectSkillsDir = join(dirname(index.projectDir), "skills");
   const sources = resolveSources(resolved, {
     roots: artifactRoots(env),
     projectSkillsDir,
     ...(resolved.deps !== undefined
-      ? {
-          store: {
-            deps: resolved.deps,
-            lock: readLock(lockPathFor(resolved.sourcePath)) ?? undefined,
-            root: storeRootDir(env),
-          },
-        }
+      ? { store: { deps: resolved.deps, lock: lock ?? undefined, root: storeRootDir(env) } }
       : {}),
   });
   return { resolved, sources, warnings };
@@ -153,7 +156,7 @@ export interface PreparedInvocation {
 export function prepareBundleInvocation(opts: PrepareOpts): PreparedInvocation {
   const { name, claudeArgs, env, cwd } = opts;
   const index = opts.preloadedIndex ?? loadBundleIndex(env, cwd);
-  const { resolved, sources, warnings } = resolveBundle(name, index, env);
+  const { resolved, sources, warnings } = resolveBundle(name, index, env, { materialize: true });
   const { cacheDir, version } = compile(resolved, sources, {
     cacheRoot: bundleCacheRoot(env),
     ...(opts.onBuild ? { onBuild: opts.onBuild } : {}),
