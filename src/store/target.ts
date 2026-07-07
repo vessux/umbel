@@ -53,6 +53,13 @@ export interface TargetContext {
   env: NodeJS.ProcessEnv;
   verb: string;
   interactive: boolean;
+  /**
+   * True when the command runs from within a project (a `.claude/` root exists).
+   * The user-scope heads-up only fires here: editing a shared global bundle
+   * *from a repo* is the surprise story 33 warns about; managing your global
+   * library directly is deliberate, so it stays quiet.
+   */
+  inProject: boolean;
   stderr?: (s: string) => void;
 }
 
@@ -66,8 +73,11 @@ export async function resolveTargetOrPick(
   ctx: TargetContext,
 ): Promise<BundleEntry> {
   const write = ctx.stderr ?? ((s: string) => void process.stderr.write(s));
+  const emit = (entry: BundleEntry) => {
+    if (ctx.inProject) headsUp(entry, write);
+  };
   if (res.kind === "resolved") {
-    headsUp(res.entry, write);
+    emit(res.entry);
     return res.entry;
   }
   if (res.kind === "multiple") {
@@ -76,7 +86,7 @@ export async function resolveTargetOrPick(
     );
     if (bundles.length === 1) {
       const entry = lookupBundle(ctx.index, bundles[0]!.name);
-      headsUp(entry, write);
+      emit(entry);
       return entry;
     }
     if (bundles.length >= 2) {
@@ -91,7 +101,7 @@ export async function resolveTargetOrPick(
         message: `Select bundle for ${ctx.verb}:`,
       });
       const entry = lookupBundle(ctx.index, name);
-      headsUp(entry, write);
+      emit(entry);
       return entry;
     }
   }

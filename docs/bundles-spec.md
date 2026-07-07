@@ -690,6 +690,8 @@ project's own `.mcp.json` is additive rather than hidden.
 umbel run    [<name>] [--no-cache] [-- ...args]   # exec claude
 umbel apply  [<name>] [--vanilla]                 # write pin + warm cache (--vanilla = pin "no bundle")
 umbel unpin                                       # remove pin
+umbel remove <alias> | <alias>/<leaf> [--bundle]  # drop a dependency or one artifact
+umbel fork   [<newname>] [--bundle <src>]         # project-scope divergent copy
 umbel list                                        # table
 umbel show   [<name>]                             # resolved view
 umbel init                                        # wizard
@@ -727,6 +729,36 @@ For a single bundle, prints three sections:
 3. **MCP diff** — three lists: project-only (will be hidden by
    `--strict-mcp-config`), bundle-only (added), shared (both define; bundle
    wins). Suppressed when `mergeMcp: true`.
+
+### `umbel remove`
+
+Non-interactive, comment-preserving edit of the target bundle's `bundle.md`
+(the yaml Document API keeps hand-written comments and body prose). Two forms:
+
+- `umbel remove <alias>` — drops the dependency: removes `deps.<alias>`, every
+  `<alias>/<leaf>` composition ref across `skills`/`agents`/`hooks`/`mcps`, and
+  the dependency's lock entry. A list (or the `deps:` map) that empties is
+  removed entirely.
+- `umbel remove <alias>/<leaf>` — drops just that one composed artifact ref; the
+  dependency and its lock entry stay (it may back other leaves). When it was the
+  alias's last ref, a hint suggests `umbel remove <alias>` to drop the now-unused
+  dependency.
+
+`remove` only edits the target bundle's *own* manifest; a ref that exists solely
+via `extends` is not removable (exit 3, with a `fork`-to-diverge hint). Removal
+never introduces executable content, so it runs no trust gate.
+
+### `umbel fork`
+
+`umbel fork [<newname>] [--bundle <src>]` copies a bundle **into the current
+project** (`.claude/bundles/`) to diverge from it — the escape hatch a user-scope
+edit heads-up points to. The source is resolved by the uniform target rule
+(`--bundle`/pin), or picked from the full list on a TTY when unresolved. The new
+name is the sole positional; on a TTY it is prompted when omitted, otherwise it
+defaults to the source name — producing a same-name **project-scope shadow** that
+takes precedence over the user-scope original. The `bundle.md` is copied with its
+`name:` rewritten (comments preserved) and its sibling lock copied verbatim, so
+the fork is immediately usable. An existing dest file is a conflict (exit 4).
 
 ## Risks acknowledged
 

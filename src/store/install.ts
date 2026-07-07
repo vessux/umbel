@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolveLinkDir, storeRootDir } from "../bundle/env.ts";
 import { loadBundleIndex } from "../bundle/exec.ts";
+import { findProjectRoot } from "../bundle/pin.ts";
 import { isDir } from "../claude-dirs.ts";
 import { UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
@@ -53,6 +54,7 @@ export async function runInstall(
     env,
     verb: "install",
     interactive: isInteractive(env),
+    inProject: findProjectRoot(cwd, homedir()) !== null,
   });
   const manifest = entry.manifest!;
   const deps = manifest.deps ?? {};

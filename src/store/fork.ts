@@ -64,7 +64,9 @@ async function resolveForkSource(
   const res = resolveTarget(index, bundleFlag, cwd, homedir());
   if (res.kind === "resolved") return res.entry;
   if (res.kind === "multiple") {
-    return resolveTargetOrPick(res, { index, env, verb: "fork", interactive });
+    // fork never emits the "edit affects other projects" heads-up — forking IS
+    // the local-copy action it would suggest — so inProject is always false.
+    return resolveTargetOrPick(res, { index, env, verb: "fork", interactive, inProject: false });
   }
   // vanilla | absent — fork can branch from ANY discoverable bundle
   if (!interactive) {

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { loadBundleIndex } from "../bundle/exec.ts";
 import type { BundleManifest } from "../bundle/manifest.ts";
+import { findProjectRoot } from "../bundle/pin.ts";
 import { NotFoundError, UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
 import { type LockFile, lockPathFor, readLock, writeLock } from "./lock.ts";
@@ -25,6 +26,7 @@ export async function runRemove(
     env,
     verb: "remove",
     interactive: isInteractive(env),
+    inProject: findProjectRoot(cwd, homedir()) !== null,
   });
   const manifest = entry.manifest!;
   const raw = readFileSync(entry.path, "utf8");

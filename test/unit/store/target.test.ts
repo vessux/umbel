@@ -75,15 +75,16 @@ describe("resolveTarget", () => {
 });
 
 describe("resolveTargetOrPick", () => {
-  const ctx = (interactive: boolean, entries: BundleEntry[]) => ({
+  const ctx = (interactive: boolean, entries: BundleEntry[], inProject = true) => ({
     index: index(entries),
     env: {} as NodeJS.ProcessEnv,
     verb: "remove",
     interactive,
+    inProject,
     stderr: vi.fn(),
   });
 
-  it("returns the resolved entry and heads-up on user scope", async () => {
+  it("heads-up on a user-scope target when inside a project", async () => {
     const c = ctx(false, [entry({ name: "web", scope: "user" })]);
     const e = await resolveTargetOrPick(
       { kind: "resolved", entry: c.index.entries[0]!, via: "flag" },
@@ -91,6 +92,12 @@ describe("resolveTargetOrPick", () => {
     );
     expect(e.name).toBe("web");
     expect(c.stderr).toHaveBeenCalled();
+  });
+
+  it("no heads-up on a user-scope target outside a project", async () => {
+    const c = ctx(false, [entry({ name: "web", scope: "user" })], false);
+    await resolveTargetOrPick({ kind: "resolved", entry: c.index.entries[0]!, via: "flag" }, c);
+    expect(c.stderr).not.toHaveBeenCalled();
   });
 
   it("no heads-up on project scope", async () => {

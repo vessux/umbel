@@ -11,6 +11,8 @@ Bundle verbs:
   umbel run [name] [-- ...]           Launch claude with bundle flags, or vanilla if no pin/picker chose so.
   umbel add <coord> [leaf] [--bundle <name>]  Fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill.
   umbel install [--frozen] [--allow-missing] [--bundle <name>]  Reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path).
+  umbel remove <alias> | <alias>/<leaf> [--bundle <name>]  Drop a dependency (+ its refs & lock) or one composed artifact.
+  umbel fork [newname] [--bundle <src>]  Copy a bundle into the current project to diverge (project scope).
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
   umbel shim install [--force]        Install the PATH shim (~/.local/share/umbel/bin/claude).
@@ -43,6 +45,8 @@ export const BUNDLE_VERBS = new Set([
   "run",
   "add",
   "install",
+  "remove",
+  "fork",
   "apply",
   "unpin",
   "list",

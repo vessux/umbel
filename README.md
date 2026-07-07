@@ -180,6 +180,8 @@ umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel add <coord> [leaf] [--bundle <name>] [--yes]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
 umbel install [--frozen] [--allow-missing] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path)
+umbel remove <alias> | <alias>/<leaf> [--bundle <name>]  # drop a dependency (+ its refs & lock) or one composed artifact
+umbel fork [newname] [--bundle <src>]   # copy a bundle into the current project to diverge (project scope; same-name shadow by default)
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
@@ -344,7 +346,7 @@ Arg and env bypass the picker entirely and are not constrained to the pin's cand
 | 1    | Runtime failure (e.g. `claude` not found on PATH)               |
 | 2    | Usage error (bad flag, validation error, picker on non-TTY)     |
 | 3    | Bundle / dependency / parent not found                          |
-| 4    | Conflict without `--force` (shim install)                       |
+| 4    | Conflict (shim install without `--force`; `fork` dest exists)   |
 | 5    | Trust gate: executable (hook/MCP) content not confirmed         |
 
 ## Troubleshooting

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { storeRootDir } from "../bundle/env.ts";
 import { loadBundleIndex } from "../bundle/exec.ts";
+import { findProjectRoot } from "../bundle/pin.ts";
 import { UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
 import { confirmExecTrust } from "../ui/prompt.ts";
@@ -25,6 +26,7 @@ export async function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string
     env,
     verb: "add",
     interactive: isInteractive(env),
+    inProject: findProjectRoot(cwd, homedir()) !== null,
   });
 
   const manifest = entry.manifest!;
