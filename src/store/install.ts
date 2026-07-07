@@ -1,6 +1,16 @@
+import { storeRootDir } from "../bundle/env.ts";
+import { loadBundleIndex } from "../bundle/exec.ts";
 import { UsageError } from "../errors.ts";
+import { resolveTargetBundle } from "./add.ts";
 import { githubUrl, parseCoordinate } from "./coordinate.ts";
-import { type LockEntry, type LockFile, serializeLock } from "./lock.ts";
+import {
+  type LockEntry,
+  type LockFile,
+  lockPathFor,
+  readLock,
+  serializeLock,
+  writeLock,
+} from "./lock.ts";
 import { ensureCheckout } from "./store.ts";
 
 export interface ReconcileOpts {
@@ -20,6 +30,69 @@ export interface ReconcileResult {
   added: string[];
   removed: string[];
   kept: string[];
+}
+
+export function runInstall(rest: string[], env: NodeJS.ProcessEnv, cwd: string): number {
+  const { frozen, bundleFlag } = parseInstallArgs(rest);
+  const index = loadBundleIndex(env, cwd);
+  const entry = resolveTargetBundle(index, bundleFlag, cwd, "install");
+  const manifest = entry.manifest!;
+  const deps = manifest.deps ?? {};
+  const lockPath = lockPathFor(entry.path);
+  const lock = readLock(lockPath);
+
+  const result = reconcile({ deps, lock, storeRoot: storeRootDir(env), env, frozen });
+
+  if (frozen) {
+    const n = Object.keys(result.lock.deps).length;
+    process.stdout.write(
+      `verified ${n} dependenc${n === 1 ? "y" : "ies"} against ${lockPath} (frozen)\n`,
+    );
+    return 0;
+  }
+  if (result.changed) {
+    writeLock(lockPath, result.lock);
+    const parts: string[] = [];
+    if (result.added.length) parts.push(`resolved ${result.added.join(", ")}`);
+    if (result.kept.length) parts.push(`kept ${result.kept.join(", ")}`);
+    if (result.removed.length) parts.push(`dropped ${result.removed.join(", ")}`);
+    process.stdout.write(`${parts.join("; ") || "reconciled"}\n`);
+    process.stdout.write(`lock: ${lockPath}\n`);
+    return 0;
+  }
+  process.stdout.write(`'${entry.name}' already up to date\n`);
+  return 0;
+}
+
+function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: string } {
+  let frozen = false;
+  let bundleFlag: string | undefined;
+  const positionals: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    if (a === "--frozen") {
+      frozen = true;
+    } else if (a === "--bundle") {
+      const v = rest[i + 1];
+      if (v === undefined || v.startsWith("-")) throw new UsageError("--bundle requires a value");
+      bundleFlag = v;
+      i++;
+    } else if (a.startsWith("--bundle=")) {
+      const v = a.slice("--bundle=".length);
+      if (v.length === 0) throw new UsageError("--bundle requires a value");
+      bundleFlag = v;
+    } else if (a.startsWith("-")) {
+      throw new UsageError(`umbel install: unknown flag: ${a}`);
+    } else {
+      positionals.push(a);
+    }
+  }
+  // A bare positional is the target bundle name (uniform with the other verbs).
+  if (positionals.length > 1) {
+    throw new UsageError(`umbel install: unexpected argument: ${positionals[1]}`);
+  }
+  if (positionals[0] !== undefined) bundleFlag = bundleFlag ?? positionals[0];
+  return { frozen, ...(bundleFlag !== undefined ? { bundleFlag } : {}) };
 }
 
 export function reconcile(opts: ReconcileOpts): ReconcileResult {
@@ -83,7 +156,9 @@ function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
     if (!locked) {
       drift.push(`'${alias}' is in the manifest but not the lock`);
     } else if (locked.coordinate !== coordRaw) {
-      drift.push(`'${alias}' coordinate differs (manifest ${coordRaw} ≠ lock ${locked.coordinate})`);
+      drift.push(
+        `'${alias}' coordinate differs (manifest ${coordRaw} ≠ lock ${locked.coordinate})`,
+      );
     }
   }
   for (const alias of Object.keys(lock.deps)) {
