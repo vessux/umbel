@@ -3,8 +3,6 @@ import { join } from "node:path";
 import { TrustError } from "../errors.ts";
 import { hashTree } from "./content-hash.ts";
 
-export { TrustError } from "../errors.ts";
-
 export type ExecKind = "hooks" | "mcps";
 
 const EXEC_MARKERS: Record<ExecKind, string> = { hooks: "HOOK.md", mcps: "MCP.md" };
