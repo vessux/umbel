@@ -185,7 +185,6 @@ umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
 umbel shim uninstall                    # remove the shim
 umbel shim path                         # print the shim's absolute path
-umbel skills [options]                  # low-level skill installer (v0 picker)
 ```
 
 Share a bundle thin by committing `bundle.md` + its sibling `<name>.lock`: a
@@ -287,51 +286,6 @@ and [`CONTEXT.md`](CONTEXT.md) for rationale and terminology.
 
 Arg and env bypass the picker entirely and are not constrained to the pin's candidate list.
 
-## Skills picker (low-level, v0)
-
-The original v0 entry point. Symlinks handpicked skills from
-`$UMBEL_ARTIFACTS_DIR/skills/` into a project's `.claude/skills/`. Useful for
-sandbox image builds and CI idempotency checks. Mostly subsumed by bundles —
-keep using it if it fits your workflow.
-
-```bash
-# Interactive, from a Claude Code project root
-umbel skills
-
-# Deterministic install for a sandbox image build
-umbel skills --target ./skills --skills tdd,grill-me,review
-
-# CI-safe idempotency check
-umbel skills --target .claude/skills --skills tdd,review --dry-run
-
-# Replace a stray real dir left over from a manual copy
-umbel skills --target .claude/skills --skills tdd --force
-```
-
-### Picker flags
-
-| Flag                | Meaning                                                |
-|---------------------|--------------------------------------------------------|
-| `--target <path>`   | Exact parent dir for skill symlinks                    |
-| `--source <path>`   | Override source root (default `$UMBEL_ARTIFACTS_DIR/skills`) |
-| `--skills <csv>`    | Non-interactive selection; implies no prompts          |
-| `--force`           | Back up conflicting real dirs/files and replace        |
-| `--dry-run`         | Print plan, exit 0, no writes                          |
-| `-h`, `--help`      | Usage                                                  |
-| `-v`, `--version`   | Version                                                |
-
-### Picker row states
-
-Rows start checked iff currently installed correctly.
-
-| Icon | Meaning                            | Default-checked | Toggleable              |
-|------|------------------------------------|-----------------|-------------------------|
-| (none) | Not installed                    | no              | yes                     |
-| (none) | Installed (correct symlink)      | yes             | yes (uncheck = remove)  |
-| `⚠`  | Symlink → different source         | yes             | yes (leave = relink)    |
-| `✖`  | Real dir/file, not a symlink       | no              | no (need `--force`)     |
-| `?`  | Malformed SKILL.md                 | no              | yes                     |
-
 ## Env vars
 
 | Var                   | Effect                                                                  |
@@ -342,17 +296,16 @@ Rows start checked iff currently installed correctly.
 | `UMBEL_BUNDLE`        | Used by `run` resolution (arg > env > pin). `__vanilla__` forces vanilla. |
 | `UMBEL_RESOLVED`      | Set by `umbel run` when spawning claude. The shim short-circuits to vanilla when present, so subprocess shellouts to `claude` don't re-prompt. |
 | `UMBEL_GITHUB_BASE`   | Override the `github:` coordinate host (default: `https://github.com`). |
-| `NO_COLOR`            | Disable ANSI color (icons retained).                                    |
 
 ## Exit codes
 
 | Code | Meaning                                                         |
 |------|-----------------------------------------------------------------|
 | 0    | Success (or dry-run completed)                                  |
-| 1    | Apply / runtime failure                                         |
+| 1    | Runtime failure (e.g. `claude` not found on PATH)               |
 | 2    | Usage error (bad flag, validation error, picker on non-TTY)     |
-| 3    | Source / bundle / parent not found                              |
-| 4    | Conflict without `--force` (skills picker)                      |
+| 3    | Bundle / dependency / parent not found                          |
+| 4    | Conflict without `--force` (shim install)                       |
 
 ## Troubleshooting
 

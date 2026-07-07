@@ -1,7 +1,5 @@
 import { groupMultiselect } from "@clack/prompts";
-import type { Capabilities, SkillRow } from "../types.ts";
-import { PICKER_MAX_VISIBLE, assertSelected } from "./prompt.ts";
-import { renderSkillRow } from "./render.ts";
+import { assertSelected } from "./prompt.ts";
 
 export interface GroupedOption<V> {
   value: V;
@@ -55,29 +53,4 @@ export async function pickGrouped<V>(opts: {
     }),
   );
   return new Set(result);
-}
-
-export async function pickSkills(
-  rows: SkillRow[],
-  caps: Capabilities,
-  termWidth: number,
-): Promise<Set<string>> {
-  if (rows.length === 0) return new Set();
-  const rendered = rows.map((row) => renderSkillRow(row, caps, termWidth));
-  const options: GroupedOption<string>[] = rendered.map((r) => ({
-    label: r.label,
-    value: r.name,
-    ...(r.disabled !== undefined ? { disabled: true as const, hint: r.disabled } : {}),
-  }));
-  const initialValues = rendered
-    .filter((r) => r.checked && r.disabled === undefined)
-    .map((r) => r.name);
-
-  return pickGrouped<string>({
-    message: "Select skills (space to toggle, enter to confirm):",
-    groups: bucketByQualifiedName(options, (o) => o.value),
-    initialValues,
-    required: false,
-    maxItems: Math.min(PICKER_MAX_VISIBLE, options.length),
-  });
 }

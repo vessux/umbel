@@ -16,12 +16,10 @@ describe("parseSubcommand", () => {
     expect(parseSubcommand(["--version"])).toEqual({ kind: "version" });
   });
 
-  it("recognizes 'skills' subcommand", () => {
-    expect(parseSubcommand(["skills"])).toEqual({ kind: "skills", rest: [] });
-    expect(parseSubcommand(["skills", "--target", "./x"])).toEqual({
-      kind: "skills",
-      rest: ["--target", "./x"],
-    });
+  it("treats the removed 'skills' verb as an unknown command", () => {
+    const r = parseSubcommand(["skills"]);
+    expect(r.kind).toBe("error");
+    if (r.kind === "error") expect(r.message).toMatch(/unknown command 'skills'/);
   });
 
   it("recognizes top-level bundle verbs", () => {

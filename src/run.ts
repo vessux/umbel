@@ -1,11 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve as pathResolve } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { applyPlan } from "./applier/apply.ts";
-import { BUNDLE_VERBS, helpText, parseArgs, parseSubcommand } from "./args.ts";
+import { BUNDLE_VERBS, helpText, parseSubcommand } from "./args.ts";
 import { gcBundles, listBundleNames } from "./bundle/cache.ts";
 import { compile } from "./bundle/compile.ts";
 import {
@@ -33,23 +32,12 @@ import {
   writeVanillaPin,
 } from "./bundle/pin.ts";
 import { renderShow } from "./bundle/show.ts";
-import { detectCapabilities } from "./config.ts";
-import { CliError, UsageError } from "./errors.ts";
-import { renderPlanDiff } from "./planner/diff.ts";
-import { buildPlan } from "./planner/plan.ts";
+import { CliError } from "./errors.ts";
 import { installShim, uninstallShim } from "./shim/install.ts";
-import { disambiguateSkills } from "./source/disambiguate.ts";
-import { scanSource } from "./source/scan.ts";
-import { probeAll } from "./state/probe.ts";
 import { runAdd } from "./store/add.ts";
 import { runInstall } from "./store/install.ts";
-import { resolveInteractiveTargets, targetFromOverride } from "./target/resolve.ts";
-import type { Capabilities, Options, Target } from "./types.ts";
 import { runInitWizard } from "./ui/bundle-init.ts";
 import { VANILLA_PICK, pickBundle, pickScopedBundle } from "./ui/bundle-picker.ts";
-import { askCustomPath, confirmApply } from "./ui/confirm.ts";
-import { pickSkills } from "./ui/picker.ts";
-import { promptTarget } from "./ui/target-prompt.ts";
 
 function readVersion(): string {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -60,12 +48,6 @@ function readVersion(): string {
     } catch {}
   }
   return "0.0.0";
-}
-
-function termWidth(): number {
-  return typeof process.stdout.columns === "number" && process.stdout.columns > 0
-    ? process.stdout.columns
-    : 80;
 }
 
 export async function run(argv: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
@@ -93,9 +75,6 @@ async function runInner(argv: string[], env: NodeJS.ProcessEnv, cwd: string): Pr
   if (sub.kind === "error") {
     process.stderr.write(`${sub.message}\n`);
     return 2;
-  }
-  if (sub.kind === "skills") {
-    return runSkills(sub.rest, env, cwd);
   }
   return runBundleVerb(sub.verb, sub.rest, env, cwd);
 }
@@ -493,94 +472,6 @@ async function runBundleShow(rest: string[], env: NodeJS.ProcessEnv, cwd: string
   const { resolved, sources, warnings } = resolveBundle(name, index, env);
   const projectMcpPath = join(cwd, ".mcp.json");
   process.stdout.write(renderShow(resolved, sources, { projectMcpPath, warnings }));
-  return 0;
-}
-
-async function runSkills(argv: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
-  const opts: Options = parseArgs(argv, { cwd, env });
-
-  if (opts.help) {
-    process.stdout.write(helpText());
-    return 0;
-  }
-  if (opts.version) {
-    process.stdout.write(`umbel ${readVersion()}\n`);
-    return 0;
-  }
-
-  const caps: Capabilities = detectCapabilities({
-    env,
-    stdinIsTTY: Boolean(process.stdin.isTTY),
-    stdoutIsTTY: Boolean(process.stdout.isTTY),
-    skillsFlagPresent: opts.skills !== null,
-  });
-
-  if (caps.interactive) {
-    return runInteractive(opts, caps, cwd);
-  }
-  return runNonInteractive(opts, caps);
-}
-
-async function runNonInteractive(opts: Options, caps: Capabilities): Promise<number> {
-  if (opts.target === null) {
-    throw new UsageError("--target is required in non-interactive mode");
-  }
-  if (opts.skills === null) {
-    throw new UsageError("--skills is required in non-interactive mode");
-  }
-
-  const skills = disambiguateSkills(scanSource(opts.source));
-  const target: Target = targetFromOverride(opts.target);
-  const rows = probeAll(skills, target.path, opts.force);
-  const selection = new Set(opts.skills);
-  const plan = buildPlan(rows, selection, target, { force: opts.force });
-  const diff = renderPlanDiff(plan, { color: caps.color });
-
-  if (opts.dryRun) {
-    process.stdout.write(`${diff}\n`);
-    return 0;
-  }
-  process.stderr.write(`${diff}\n`);
-  applyPlan(plan);
-  return 0;
-}
-
-async function runInteractive(opts: Options, caps: Capabilities, cwd: string): Promise<number> {
-  let target: Target;
-  if (opts.target !== null) {
-    target = targetFromOverride(opts.target);
-  } else {
-    const choices = resolveInteractiveTargets(cwd, homedir());
-    target = await promptTarget(choices, async () => {
-      const p = await askCustomPath();
-      return isAbsolute(p) ? p : pathResolve(cwd, p);
-    });
-  }
-
-  const skills = disambiguateSkills(scanSource(opts.source));
-  const rows = probeAll(skills, target.path, opts.force);
-
-  if (rows.length === 0) {
-    process.stderr.write(`No skills found in ${opts.source}\n`);
-    return 0;
-  }
-
-  const selection = await pickSkills(rows, caps, termWidth());
-
-  const plan = buildPlan(rows, selection, target, { force: opts.force });
-  const diff = renderPlanDiff(plan, { color: caps.color });
-  process.stdout.write(`\n${diff}\n\n`);
-
-  if (opts.dryRun) {
-    return 0;
-  }
-  if (plan.entries.length === 0) {
-    return 0;
-  }
-
-  const ok = await confirmApply();
-  if (!ok) return 0;
-  applyPlan(plan);
   return 0;
 }
 
