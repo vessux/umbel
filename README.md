@@ -306,6 +306,7 @@ Arg and env bypass the picker entirely and are not constrained to the pin's cand
 | 2    | Usage error (bad flag, validation error, picker on non-TTY)     |
 | 3    | Bundle / dependency / parent not found                          |
 | 4    | Conflict without `--force` (shim install)                       |
+| 5    | Trust gate: executable (hook/MCP) content not confirmed         |
 
 ## Troubleshooting
 

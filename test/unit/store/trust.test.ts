@@ -1,8 +1,11 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TrustError } from "../../../src/errors.ts";
 import {
+  type TrustChange,
   decideTrust,
+  gateTrust,
   listExecArtifacts,
   planTrust,
   renderTrustDiff,
@@ -135,5 +138,94 @@ describe("planTrust + renderTrustDiff", () => {
       writeFile(join(dir, "hooks/fmt/run.sh"), "#!/bin/sh\necho same\n");
     }
     expect(planTrust(before, after)).toEqual([]);
+  });
+});
+
+describe("gateTrust", () => {
+  const noChanges: TrustChange[] = [];
+  const oneChange: TrustChange[] = [
+    { ref: "hooks/fmt", kind: "hooks", status: "added", beforeDir: null, afterDir: "/x" },
+  ];
+
+  it("returns silently when there are no changes (already-trusted path)", async () => {
+    let wrote = "";
+    await gateTrust({
+      changes: noChanges,
+      interactive: false,
+      yes: false,
+      confirm: async () => false,
+      write: (s) => {
+        wrote += s;
+      },
+      renderer: () => "DIFF",
+      what: "dep 'x'",
+    });
+    expect(wrote).toBe("");
+  });
+
+  it("throws TrustError on a non-interactive run with changes (fail closed)", async () => {
+    await expect(
+      gateTrust({
+        changes: oneChange,
+        interactive: false,
+        yes: false,
+        confirm: async () => true,
+        write: () => {},
+        renderer: () => "DIFF",
+        what: "dep 'x'",
+      }),
+    ).rejects.toBeInstanceOf(TrustError);
+  });
+
+  it("proceeds without prompting when --yes is set, even non-interactive", async () => {
+    let confirmCalled = false;
+    await gateTrust({
+      changes: oneChange,
+      interactive: false,
+      yes: true,
+      confirm: async () => {
+        confirmCalled = true;
+        return true;
+      },
+      write: () => {},
+      renderer: () => "DIFF",
+      what: "dep 'x'",
+    });
+    expect(confirmCalled).toBe(false);
+  });
+
+  it("prompts on a TTY and throws TrustError when the user declines", async () => {
+    let wrote = "";
+    await expect(
+      gateTrust({
+        changes: oneChange,
+        interactive: true,
+        yes: false,
+        confirm: async () => false,
+        write: (s) => {
+          wrote += s;
+        },
+        renderer: () => "THE-DIFF",
+        what: "dep 'x'",
+      }),
+    ).rejects.toBeInstanceOf(TrustError);
+    expect(wrote).toContain("THE-DIFF");
+  });
+
+  it("prompts on a TTY and returns when the user confirms", async () => {
+    let confirmCalled = false;
+    await gateTrust({
+      changes: oneChange,
+      interactive: true,
+      yes: false,
+      confirm: async () => {
+        confirmCalled = true;
+        return true;
+      },
+      write: () => {},
+      renderer: () => "DIFF",
+      what: "dep 'x'",
+    });
+    expect(confirmCalled).toBe(true);
   });
 });

@@ -1,6 +1,9 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { TrustError } from "../errors.ts";
 import { hashTree } from "./content-hash.ts";
+
+export { TrustError } from "../errors.ts";
 
 export type ExecKind = "hooks" | "mcps";
 
@@ -161,4 +164,43 @@ export function renderTrustDiff(changes: TrustChange[]): string {
     }
   }
   return `${out.join("\n")}\n`;
+}
+
+export interface TrustGateOpts {
+  changes: TrustChange[];
+  interactive: boolean;
+  yes: boolean;
+  /** Injected yes/no prompt (the real one shows nothing itself; the gate writes the diff). */
+  confirm: () => Promise<boolean>;
+  /** stderr writer (injected for testability). */
+  write: (s: string) => void;
+  /** Diff renderer; defaults to renderTrustDiff. Injectable for tests. */
+  renderer?: (changes: TrustChange[]) => string;
+  /** Context label for messages, e.g. "dependency 'tools' (github:acme/tools@v2)". */
+  what: string;
+}
+
+/**
+ * Confirm new/changed executable content before it is committed to a lock
+ * (ADR-0014). Silent when nothing changed (already-trusted); `--yes` overrides;
+ * a non-interactive run fails closed; a TTY prompts and honours the answer.
+ * Throws TrustError (exit 5) on refusal.
+ */
+export async function gateTrust(opts: TrustGateOpts): Promise<void> {
+  if (opts.changes.length === 0) return;
+  if (opts.yes) return;
+  const summary = opts.changes.map((c) => c.ref).join(", ");
+  if (!opts.interactive) {
+    throw new TrustError(
+      `umbel: ${opts.what} ships new or changed executable content (${summary}); ` +
+        "refusing to trust it on a non-interactive run. Re-run on a TTY to review, or pass --yes to trust it.",
+    );
+  }
+  const render = opts.renderer ?? renderTrustDiff;
+  opts.write(`\n${opts.what} ships executable content that will auto-run. Review before trusting:\n`);
+  opts.write(render(opts.changes));
+  const ok = await opts.confirm();
+  if (!ok) {
+    throw new TrustError(`umbel: aborted — executable content from ${opts.what} was not trusted`);
+  }
 }
