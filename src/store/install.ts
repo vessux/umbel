@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolveLinkDir, storeRootDir } from "../bundle/env.ts";
 import { loadBundleIndex } from "../bundle/exec.ts";
 import { isDir } from "../claude-dirs.ts";
 import { UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
 import { confirmExecTrust } from "../ui/prompt.ts";
-import { resolveTargetBundle } from "./add.ts";
 import { githubUrl, parseCoordinate } from "./coordinate.ts";
 import {
   type LockEntry,
@@ -16,6 +16,7 @@ import {
   writeLock,
 } from "./lock.ts";
 import { checkoutPath, ensureCheckout } from "./store.ts";
+import { resolveTarget, resolveTargetOrPick } from "./target.ts";
 import { type TrustChange, gateTrust, planTrust } from "./trust.ts";
 
 export interface ReconcileOpts {
@@ -46,7 +47,13 @@ export async function runInstall(
 ): Promise<number> {
   const { frozen, bundleFlag, yes, allowMissing } = parseInstallArgs(rest);
   const index = loadBundleIndex(env, cwd);
-  const entry = resolveTargetBundle(index, bundleFlag, cwd, "install");
+  const res = resolveTarget(index, bundleFlag, cwd, homedir());
+  const entry = await resolveTargetOrPick(res, {
+    index,
+    env,
+    verb: "install",
+    interactive: isInteractive(env),
+  });
   const manifest = entry.manifest!;
   const deps = manifest.deps ?? {};
   const lockPath = lockPathFor(entry.path);

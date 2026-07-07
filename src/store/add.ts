@@ -1,8 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { storeRootDir } from "../bundle/env.ts";
-import { type BundleIndex, loadBundleIndex } from "../bundle/exec.ts";
-import { readPin } from "../bundle/pin.ts";
+import { loadBundleIndex } from "../bundle/exec.ts";
 import { UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
 import { confirmExecTrust } from "../ui/prompt.ts";
@@ -11,6 +10,7 @@ import { deriveAlias, githubUrl, parseCoordinate } from "./coordinate.ts";
 import { type LockFile, lockPathFor, readLock, serializeLock, writeLock } from "./lock.ts";
 import { addDepEdit } from "./manifest-edit.ts";
 import { checkoutPath, ensureCheckout } from "./store.ts";
+import { resolveTarget, resolveTargetOrPick } from "./target.ts";
 import { gateTrust, planTrust } from "./trust.ts";
 
 export async function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
@@ -19,7 +19,13 @@ export async function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string
   const alias = deriveAlias(coord);
 
   const index = loadBundleIndex(env, cwd);
-  const entry = resolveTargetBundle(index, bundleFlag, cwd);
+  const res = resolveTarget(index, bundleFlag, cwd, homedir());
+  const entry = await resolveTargetOrPick(res, {
+    index,
+    env,
+    verb: "add",
+    interactive: isInteractive(env),
+  });
 
   const manifest = entry.manifest!;
   const existingCoord = manifest.deps?.[alias];
@@ -169,31 +175,4 @@ function parseAddArgs(rest: string[]): {
     ...(bundleFlag !== undefined ? { bundleFlag } : {}),
     yes,
   };
-}
-
-export function resolveTargetBundle(
-  index: BundleIndex,
-  bundleFlag: string | undefined,
-  cwd: string,
-  verb = "add",
-) {
-  let name = bundleFlag;
-  if (name === undefined) {
-    const pin = readPin(cwd, homedir());
-    const only = pin?.candidates.length === 1 ? pin.candidates[0] : undefined;
-    if (only?.kind === "bundle") name = only.name;
-  }
-  if (name === undefined) {
-    throw new UsageError(
-      `umbel ${verb}: no target bundle (pass --bundle <name>, or pin one with 'umbel apply <name>')`,
-    );
-  }
-  const entry = index.entries.find((e) => e.name === name && !e.shadowed);
-  if (entry === undefined) {
-    throw new UsageError(`umbel ${verb}: bundle '${name}' not found`);
-  }
-  if (entry.malformed || entry.manifest === undefined) {
-    throw new UsageError(entry.error ?? `umbel ${verb}: bundle '${name}' is malformed`);
-  }
-  return entry;
 }
