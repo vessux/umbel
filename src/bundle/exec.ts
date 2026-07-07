@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { NotFoundError, UsageError } from "../errors.ts";
-import { reconcile } from "../store/install.ts";
-import { lockPathFor, readLock, writeLock } from "../store/lock.ts";
+import { materializeFromLock } from "../store/install.ts";
+import { lockPathFor, readLock } from "../store/lock.ts";
 import { computeClaudeArgs } from "./claude-args.ts";
 import { compile } from "./compile.ts";
 import { type ResolvedBundle, compose, composeChain } from "./compose.ts";
@@ -116,19 +116,11 @@ export function resolveBundle(
         .flatMap((e) => e.warnings ?? []),
     ),
   ];
-  let lock = resolved.deps !== undefined ? readLock(lockPathFor(resolved.sourcePath)) : null;
+  const lock = resolved.deps !== undefined ? readLock(lockPathFor(resolved.sourcePath)) : null;
   if (resolved.deps !== undefined && opts?.materialize) {
-    // run/apply/build auto-materialize: reconcile the manifest against the lock
-    // and fetch any missing/new store checkouts before compiling.
-    const result = reconcile({
-      deps: resolved.deps,
-      lock,
-      storeRoot: storeRootDir(env),
-      env,
-      frozen: false,
-    });
-    if (result.changed) writeLock(lockPathFor(resolved.sourcePath), result.lock);
-    lock = result.lock;
+    // run/apply/build auto-materialize: fetch any missing locked checkouts
+    // before compiling. Consumes the lock as-is; does not rewrite it.
+    materializeFromLock(lock, storeRootDir(env), env);
   }
 
   const projectSkillsDir = join(dirname(index.projectDir), "skills");

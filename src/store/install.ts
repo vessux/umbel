@@ -87,12 +87,39 @@ function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: strin
       positionals.push(a);
     }
   }
-  // A bare positional is the target bundle name (uniform with the other verbs).
+  // The target bundle is --bundle OR a single bare positional, not both.
   if (positionals.length > 1) {
     throw new UsageError(`umbel install: unexpected argument: ${positionals[1]}`);
   }
-  if (positionals[0] !== undefined) bundleFlag = bundleFlag ?? positionals[0];
+  if (positionals[0] !== undefined) {
+    if (bundleFlag !== undefined) {
+      throw new UsageError(
+        `umbel install: bundle specified twice (--bundle ${bundleFlag} and '${positionals[0]}')`,
+      );
+    }
+    bundleFlag = positionals[0];
+  }
   return { frozen, ...(bundleFlag !== undefined ? { bundleFlag } : {}) };
+}
+
+/**
+ * Fetch every locked dependency's checkout onto disk (a no-op when already
+ * staked). This is the run/apply/build auto-materialize path: it consumes the
+ * lock as truth and never rewrites it — reconciling a hand-edited manifest is
+ * `install`'s job, so `run` stays a pure consumer and can't fail writing a
+ * read-only bundle's lock.
+ */
+export function materializeFromLock(
+  lock: LockFile | null,
+  storeRoot: string,
+  env: NodeJS.ProcessEnv,
+): void {
+  if (!lock) return;
+  for (const alias of Object.keys(lock.deps)) {
+    const entry = lock.deps[alias]!;
+    const coord = parseCoordinate(entry.coordinate);
+    ensureCheckout({ coord, url: githubUrl(coord, env), storeRoot, lockedCommit: entry.commit });
+  }
 }
 
 export function reconcile(opts: ReconcileOpts): ReconcileResult {
@@ -177,6 +204,9 @@ function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
       storeRoot,
       lockedCommit: locked.commit,
     });
+    // Defensive: ensureCheckout(lockedCommit) is contracted to return that exact
+    // commit, so this can't fire today — it guards a future change that fetches
+    // by ref. The reachable integrity gate is the content-hash check below.
     if (checkout.commit !== locked.commit) {
       throw new UsageError(
         `umbel install --frozen: '${alias}' resolved to ${checkout.commit.slice(0, 12)} but the lock pins ${locked.commit.slice(0, 12)}`,

@@ -111,4 +111,14 @@ describe("umbel install (integration)", () => {
       existsSync(join(root, "data/store/github/acme/tools", commit, "skills/greet/SKILL.md")),
     ).toBe(true);
   });
+
+  it("auto-materialize consumes the lock without rewriting it (run/build stay pure)", () => {
+    expect(umbel("add", "github:acme/tools@v1", "--bundle", "dev").status).toBe(0);
+    const lockBefore = readFileSync(lockPath(), "utf8");
+
+    rmSync(join(root, "data/store"), { recursive: true, force: true });
+    expect(umbel("build", "dev").status).toBe(0);
+
+    expect(readFileSync(lockPath(), "utf8")).toBe(lockBefore); // no churn
+  });
 });
