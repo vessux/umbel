@@ -127,6 +127,9 @@ export function resolveBundle(
   const sources = resolveSources(resolved, {
     roots: artifactRoots(env),
     projectSkillsDir,
+    // env is always passed so the built-in `local` dep resolves even when the
+    // bundle declares no `deps:` map.
+    env,
     ...(resolved.deps !== undefined
       ? { store: { deps: resolved.deps, lock: lock ?? undefined, root: storeRootDir(env) } }
       : {}),

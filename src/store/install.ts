@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { storeRootDir } from "../bundle/env.ts";
+import { resolveLinkDir, storeRootDir } from "../bundle/env.ts";
 import { loadBundleIndex } from "../bundle/exec.ts";
+import { isDir } from "../claude-dirs.ts";
 import { UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
 import { confirmExecTrust } from "../ui/prompt.ts";
@@ -25,6 +26,8 @@ export interface ReconcileOpts {
   env: NodeJS.ProcessEnv;
   /** Strict mode (`install --frozen`): assert no drift, materialize exactly, write nothing. */
   frozen: boolean;
+  /** `--allow-missing`: tolerate an unresolvable `link:` path under `--frozen`. */
+  allowMissing?: boolean;
 }
 
 export interface ReconcileResult {
@@ -41,7 +44,7 @@ export async function runInstall(
   env: NodeJS.ProcessEnv,
   cwd: string,
 ): Promise<number> {
-  const { frozen, bundleFlag, yes } = parseInstallArgs(rest);
+  const { frozen, bundleFlag, yes, allowMissing } = parseInstallArgs(rest);
   const index = loadBundleIndex(env, cwd);
   const entry = resolveTargetBundle(index, bundleFlag, cwd, "install");
   const manifest = entry.manifest!;
@@ -49,7 +52,7 @@ export async function runInstall(
   const lockPath = lockPathFor(entry.path);
   const lock = readLock(lockPath);
 
-  const result = reconcile({ deps, lock, storeRoot: storeRootDir(env), env, frozen });
+  const result = reconcile({ deps, lock, storeRoot: storeRootDir(env), env, frozen, allowMissing });
 
   if (frozen) {
     const n = Object.keys(result.lock.deps).length;
@@ -99,9 +102,15 @@ export async function runInstall(
   return 0;
 }
 
-function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: string; yes: boolean } {
+function parseInstallArgs(rest: string[]): {
+  frozen: boolean;
+  bundleFlag?: string;
+  yes: boolean;
+  allowMissing: boolean;
+} {
   let frozen = false;
   let yes = false;
+  let allowMissing = false;
   let bundleFlag: string | undefined;
   const positionals: string[] = [];
   for (let i = 0; i < rest.length; i++) {
@@ -110,6 +119,8 @@ function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: strin
       frozen = true;
     } else if (a === "--yes") {
       yes = true;
+    } else if (a === "--allow-missing") {
+      allowMissing = true;
     } else if (a === "--bundle") {
       const v = rest[i + 1];
       if (v === undefined || v.startsWith("-")) throw new UsageError("--bundle requires a value");
@@ -137,7 +148,7 @@ function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: strin
     }
     bundleFlag = positionals[0];
   }
-  return { frozen, yes, ...(bundleFlag !== undefined ? { bundleFlag } : {}) };
+  return { frozen, yes, allowMissing, ...(bundleFlag !== undefined ? { bundleFlag } : {}) };
 }
 
 /**
@@ -172,6 +183,12 @@ export function reconcile(opts: ReconcileOpts): ReconcileResult {
   for (const alias of Object.keys(deps)) {
     const coordRaw = deps[alias]!;
     const coord = parseCoordinate(coordRaw);
+    if (coord.transport === "link") {
+      // link:/local deps are live and unlocked — never enter the lock. Flipping
+      // an alias from github: to link: therefore drops its stale pin here (the
+      // alias is absent from nextDeps), keeping every <alias>/<leaf> ref valid.
+      continue;
+    }
     const existing = current[alias];
     if (existing && existing.coordinate === coordRaw) {
       // Keep the pin verbatim (never bump). Still materialize its exact bytes.
@@ -205,9 +222,37 @@ export function reconcile(opts: ReconcileOpts): ReconcileResult {
 
 function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
   const { deps, lock, storeRoot, env } = opts;
+
+  // Split the manifest by transport: only github deps are pinned in the lock;
+  // link:/local deps are live (reproducibility covers the git subset only).
+  const gitDeps: string[] = [];
+  const linkDeps: string[] = [];
+  for (const alias of Object.keys(deps)) {
+    (parseCoordinate(deps[alias]!).transport === "link" ? linkDeps : gitDeps).push(alias);
+  }
+
+  // A link: path must resolve unless --allow-missing (ADR-0013).
+  if (!opts.allowMissing) {
+    for (const alias of linkDeps) {
+      const coord = parseCoordinate(deps[alias]!);
+      const dir = resolveLinkDir(coord, env);
+      if (!isDir(dir)) {
+        throw new UsageError(
+          `umbel install --frozen: link path '${dir}' for dependency '${alias}' (${coord.raw}) does not exist (pass --allow-missing to skip)`,
+        );
+      }
+    }
+  }
+
   if (!lock) {
-    if (Object.keys(deps).length === 0) {
-      return { lock: { version: 1, deps: {} }, changed: false, added: [], removed: [], kept: [] };
+    if (gitDeps.length === 0) {
+      return {
+        lock: { version: 1, deps: {} },
+        changed: false,
+        added: [],
+        removed: [],
+        kept: linkDeps,
+      };
     }
     throw new UsageError(
       "umbel install --frozen: no lock file found; run 'umbel install' first to create one",
@@ -215,7 +260,7 @@ function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
   }
 
   const drift: string[] = [];
-  for (const alias of Object.keys(deps)) {
+  for (const alias of gitDeps) {
     const coordRaw = deps[alias]!;
     const locked = lock.deps[alias];
     if (!locked) {
@@ -227,7 +272,9 @@ function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
     }
   }
   for (const alias of Object.keys(lock.deps)) {
-    if (!(alias in deps)) drift.push(`'${alias}' is in the lock but not the manifest`);
+    if (!gitDeps.includes(alias)) {
+      drift.push(`'${alias}' is in the lock but is not a github: dependency in the manifest`);
+    }
   }
   if (drift.length > 0) {
     throw new UsageError(`umbel install --frozen: manifest/lock drift:\n  ${drift.join("\n  ")}`);
@@ -257,5 +304,11 @@ function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
     }
   }
 
-  return { lock, changed: false, added: [], removed: [], kept: Object.keys(lock.deps) };
+  return {
+    lock,
+    changed: false,
+    added: [],
+    removed: [],
+    kept: [...Object.keys(lock.deps), ...linkDeps],
+  };
 }

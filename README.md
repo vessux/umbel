@@ -179,7 +179,7 @@ umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cac
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel add <coord> [leaf] [--bundle <name>] [--yes]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
-umbel install [--frozen] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict, reproducible, writes nothing)
+umbel install [--frozen] [--allow-missing] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path)
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
@@ -194,6 +194,18 @@ reconciles a hand-edited `deps:` into the lock (resolving new/changed
 dependencies, keeping existing pins, dropping removed ones) without ever
 bumping a pin — that is `umbel update`'s job. `run` / `apply` / `build`
 auto-materialize any missing store checkouts before compiling.
+
+Not every dependency is a fetched git pin. A `link:<path>` coordinate points at
+a **local directory** (unlocked, live), and the built-in `local` dependency
+(`≙ link:${UMBEL_HOME}/local`) is where hand-authored, not-yet-published
+artifacts live — reference them as `local/<leaf>` with no `deps:` entry. `link:`
+paths expand `${…}` variables (`${HOME}`, `${UMBEL_HOME}`, …; an undefined one
+is an error), whereas a `github:` coordinate must resolve identically everywhere
+and rejects expansion. Because an alias is decoupled from its coordinate,
+**publishing a local artifact is a one-line coordinate flip** (`link:` → git
+URL) that keeps every `<alias>/<leaf>` ref valid. `link:`/`local` deps never
+enter the lock (not reproducible), so `install --frozen` errors on an absent
+`link:` path — pass `--allow-missing` to tolerate it.
 
 When invoked without `[name]` on a TTY, `run` / `apply` / `show` / `build`
 open a picker — **full** or **scoped**, depending on the pin:

@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseCoordinate } from "../../../src/store/coordinate.ts";
@@ -125,6 +125,50 @@ describe("reconcile (non-frozen)", () => {
     expect(r.lock.deps.tools!.commit).toBe(v2);
     expect(r.lock.deps.lib).toEqual(lock.deps.lib); // untouched
   });
+
+  it("skips a link: dep — it stays unlocked and live", () => {
+    const r = reconcile({
+      deps: { tools: "github:acme/tools@v1", mylib: `link:${join(root, "mylib")}` },
+      lock: null,
+      storeRoot,
+      env,
+      frozen: false,
+    });
+    expect(r.added).toEqual(["tools"]);
+    expect(Object.keys(r.lock.deps)).toEqual(["tools"]); // link dep never enters the lock
+  });
+
+  it("mints a pin when a dep is flipped from link: to github: (coordinate flip, AC5)", () => {
+    // The link dep left no lock trace, so flipping to github: is a fresh resolve.
+    const r = reconcile({
+      deps: { tools: "github:acme/tools@v1" },
+      lock: null,
+      storeRoot,
+      env,
+      frozen: false,
+    });
+    expect(r.added).toEqual(["tools"]);
+    expect(r.lock.deps.tools!.coordinate).toBe("github:acme/tools@v1");
+    expect(r.lock.deps.tools!.commit).toBe(toolsCommit);
+  });
+
+  it("drops a stale pin when a dep is flipped from github: to link: (coordinate flip)", () => {
+    const lock = {
+      version: 1 as const,
+      deps: {
+        mylib: { coordinate: "github:acme/lib@v1", commit: libCommit, contentHash: "b".repeat(64) },
+      },
+    };
+    const r = reconcile({
+      deps: { mylib: `link:${join(root, "mylib")}` },
+      lock,
+      storeRoot,
+      env,
+      frozen: false,
+    });
+    expect(r.changed).toBe(true);
+    expect(Object.keys(r.lock.deps)).toEqual([]); // github pin dropped; alias now live
+  });
 });
 
 describe("reconcile (frozen)", () => {
@@ -211,5 +255,42 @@ describe("reconcile (frozen)", () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  it("accepts a link: dep whose path exists, with no lock entry required", () => {
+    const libDir = join(root, "mylib");
+    mkdirSync(libDir, { recursive: true });
+    const r = reconcile({
+      deps: { mylib: `link:${libDir}` },
+      lock: null,
+      storeRoot,
+      env,
+      frozen: true,
+    });
+    expect(r.changed).toBe(false);
+  });
+
+  it("errors on a missing link: path", () => {
+    expect(() =>
+      reconcile({
+        deps: { mylib: `link:${join(root, "gone")}` },
+        lock: null,
+        storeRoot,
+        env,
+        frozen: true,
+      }),
+    ).toThrow(/link path.*does not exist|missing/i);
+  });
+
+  it("passes a missing link: path when allowMissing is set", () => {
+    const r = reconcile({
+      deps: { mylib: `link:${join(root, "gone")}` },
+      lock: null,
+      storeRoot,
+      env,
+      frozen: true,
+      allowMissing: true,
+    });
+    expect(r.changed).toBe(false);
   });
 });

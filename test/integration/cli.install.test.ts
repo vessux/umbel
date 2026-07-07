@@ -121,4 +121,61 @@ describe("umbel install (integration)", () => {
 
     expect(readFileSync(lockPath(), "utf8")).toBe(lockBefore); // no churn
   });
+
+  it("builds a bundle that references a built-in local/<leaf> skill (no deps, no lock)", () => {
+    // Hand-authored, kind-first under ${UMBEL_HOME}/local (config root here).
+    writeFile(
+      join(root, "config/local/skills/mine/SKILL.md"),
+      "---\nname: mine\ndescription: local one\n---\nlocal body\n",
+    );
+    writeFileSync(bundleMd(), "---\nname: dev\nskills:\n  - local/mine\n---\n");
+
+    const r = umbel("build", "dev");
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    const cacheDir = r.stdout.trim().split("\n").pop()!;
+    expect(readFileSync(join(cacheDir, "skills/mine/SKILL.md"), "utf8")).toContain("local body");
+    expect(existsSync(lockPath())).toBe(false); // local deps are never locked
+  });
+
+  it("--frozen errors on a missing link: path unless --allow-missing", () => {
+    const linkDir = join(root, "linklib");
+    writeFileSync(
+      bundleMd(),
+      `---\nname: dev\ndeps:\n  lib: link:${linkDir}\nskills:\n  - lib/util\n---\n`,
+    );
+
+    const missing = umbel("install", "--frozen", "--bundle", "dev");
+    expect(missing.status).toBe(2);
+    expect(missing.stderr).toMatch(/link path.*does not exist/);
+
+    const allowed = umbel("install", "--frozen", "--bundle", "dev", "--allow-missing");
+    expect(allowed.status).toBe(0);
+  });
+
+  it("keeps <alias>/<leaf> refs valid when a dep is flipped from github: to link:", () => {
+    // Lock the github dep, then flip its coordinate to a local checkout carrying
+    // the same skill leaf. The lock drops the stale pin; the ref still resolves.
+    expect(umbel("add", "github:acme/tools@v1", "--bundle", "dev").status).toBe(0);
+    expect(JSON.parse(readFileSync(lockPath(), "utf8")).deps.tools).toBeDefined();
+
+    const linkDir = join(root, "toolslink");
+    writeFile(
+      join(linkDir, "skills/greet/SKILL.md"),
+      "---\nname: greet\ndescription: flipped\n---\nflipped body\n",
+    );
+    writeFileSync(
+      bundleMd(),
+      `---\nname: dev\ndeps:\n  tools: link:${linkDir}\nskills:\n  - tools/greet\n---\n`,
+    );
+
+    const inst = umbel("install", "--bundle", "dev");
+    expect(inst.status).toBe(0);
+    expect(JSON.parse(readFileSync(lockPath(), "utf8")).deps.tools).toBeUndefined(); // pin dropped
+
+    const build = umbel("build", "dev");
+    expect(build.status).toBe(0);
+    const cacheDir = build.stdout.trim().split("\n").pop()!;
+    expect(readFileSync(join(cacheDir, "skills/greet/SKILL.md"), "utf8")).toContain("flipped body");
+  });
 });

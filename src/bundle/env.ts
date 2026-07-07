@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve as pathResolve } from "node:path";
 import { findClaudeBundlesDir } from "../claude-dirs.ts";
+import { CliError } from "../errors.ts";
+import { type Coordinate, expandPath } from "../store/coordinate.ts";
 import type { ArtifactRoots } from "./resolve.ts";
 
 /**
@@ -18,6 +20,25 @@ export function umbelArtifactsRoot(env: NodeJS.ProcessEnv): string {
   const xdg = env.XDG_CONFIG_HOME;
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".config");
   return join(base, "umbel");
+}
+
+/**
+ * Absolute directory a `link:`/`local` dependency resolves to. `${…}` variables
+ * expand from the process env; `${UMBEL_HOME}` defaults to the config root when
+ * unset (the env-var rename is a separate slice, ADR-0013). An undefined
+ * variable is a hard error (via `expandPath`).
+ */
+export function resolveLinkDir(coord: Coordinate, env: NodeJS.ProcessEnv): string {
+  if (coord.transport !== "link") {
+    throw new CliError(`resolveLinkDir: not a link coordinate (${coord.raw})`, 1);
+  }
+  const lookup = (name: string): string | undefined =>
+    name === "UMBEL_HOME"
+      ? env.UMBEL_HOME && env.UMBEL_HOME.length > 0
+        ? env.UMBEL_HOME
+        : umbelArtifactsRoot(env)
+      : env[name];
+  return pathResolve(expandPath(coord.path, lookup));
 }
 
 /**

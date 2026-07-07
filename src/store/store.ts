@@ -20,12 +20,20 @@ export interface EnsureOpts {
 }
 
 export function checkoutPath(storeRoot: string, coord: Coordinate, commit: string): string {
+  if (coord.transport !== "github") {
+    throw new CliError(`checkoutPath: not a github coordinate (${coord.raw})`, 1);
+  }
   return join(storeRoot, "github", coord.org, coord.repo, commit);
 }
 
 export function ensureCheckout(opts: EnsureOpts): Checkout {
+  // link:/local deps are live (never fetched or staked); only github reaches here.
+  const { coord } = opts;
+  if (coord.transport !== "github") {
+    throw new CliError(`ensureCheckout: not a github coordinate (${coord.raw})`, 1);
+  }
   if (opts.lockedCommit) {
-    const dir = checkoutPath(opts.storeRoot, opts.coord, opts.lockedCommit);
+    const dir = checkoutPath(opts.storeRoot, coord, opts.lockedCommit);
     if (existsSync(dir)) {
       return { commit: opts.lockedCommit, contentHash: hashTree(dir), dir };
     }
@@ -41,7 +49,7 @@ export function ensureCheckout(opts: EnsureOpts): Checkout {
     if (opts.lockedCommit) {
       // A ref-tip shallow clone can't reach a moved/older commit
       // ("fatal: reference is not a tree"), so fetch the pinned commit directly.
-      fetchExactCommit(opts.url, opts.lockedCommit, staging, opts.coord);
+      fetchExactCommit(opts.url, opts.lockedCommit, staging, coord);
       commit = opts.lockedCommit;
     } else {
       git(
@@ -53,17 +61,17 @@ export function ensureCheckout(opts: EnsureOpts): Checkout {
           "--depth",
           "1",
           "--branch",
-          opts.coord.ref,
+          coord.ref,
           "--single-branch",
           opts.url,
           staging,
         ],
-        opts.coord,
+        coord,
       );
-      commit = git(["-C", staging, "rev-parse", "HEAD"], opts.coord).trim();
+      commit = git(["-C", staging, "rev-parse", "HEAD"], coord).trim();
     }
     rmSync(join(staging, ".git"), { recursive: true, force: true });
-    const dir = checkoutPath(opts.storeRoot, opts.coord, commit);
+    const dir = checkoutPath(opts.storeRoot, coord, commit);
     if (!existsSync(dir)) {
       // The rename is the atomicity stake: a concurrent winner makes existsSync(dir)
       // true first, so this run keeps the existing dir and discards its own staging below.
