@@ -1,6 +1,9 @@
+import { existsSync } from "node:fs";
 import { storeRootDir } from "../bundle/env.ts";
 import { loadBundleIndex } from "../bundle/exec.ts";
 import { UsageError } from "../errors.ts";
+import { isInteractive } from "../tty.ts";
+import { confirmExecTrust } from "../ui/prompt.ts";
 import { resolveTargetBundle } from "./add.ts";
 import { githubUrl, parseCoordinate } from "./coordinate.ts";
 import {
@@ -11,7 +14,8 @@ import {
   serializeLock,
   writeLock,
 } from "./lock.ts";
-import { ensureCheckout } from "./store.ts";
+import { checkoutPath, ensureCheckout } from "./store.ts";
+import { type TrustChange, gateTrust, planTrust } from "./trust.ts";
 
 export interface ReconcileOpts {
   /** Manifest deps: alias → coordinate. */
@@ -32,8 +36,12 @@ export interface ReconcileResult {
   kept: string[];
 }
 
-export function runInstall(rest: string[], env: NodeJS.ProcessEnv, cwd: string): number {
-  const { frozen, bundleFlag } = parseInstallArgs(rest);
+export async function runInstall(
+  rest: string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Promise<number> {
+  const { frozen, bundleFlag, yes } = parseInstallArgs(rest);
   const index = loadBundleIndex(env, cwd);
   const entry = resolveTargetBundle(index, bundleFlag, cwd, "install");
   const manifest = entry.manifest!;
@@ -50,6 +58,33 @@ export function runInstall(rest: string[], env: NodeJS.ProcessEnv, cwd: string):
     );
     return 0;
   }
+
+  // Trust gate (ADR-0014): only the `added` aliases pulled new or changed
+  // content; `kept` aliases are byte-for-byte the locked (already-trusted)
+  // pins. Frozen never reaches here — it materializes the committed lock and
+  // returns above. Gate before writing the lock so a refusal writes nothing.
+  const storeRoot = storeRootDir(env);
+  const changes: TrustChange[] = [];
+  for (const alias of result.added) {
+    const next = result.lock.deps[alias]!;
+    const afterDir = checkoutPath(storeRoot, parseCoordinate(next.coordinate), next.commit);
+    const prior = lock?.deps[alias];
+    let beforeDir: string | null = null;
+    if (prior !== undefined) {
+      const priorDir = checkoutPath(storeRoot, parseCoordinate(prior.coordinate), prior.commit);
+      if (existsSync(priorDir)) beforeDir = priorDir;
+    }
+    changes.push(...planTrust(beforeDir, afterDir));
+  }
+  await gateTrust({
+    changes,
+    interactive: isInteractive(env),
+    yes,
+    confirm: confirmExecTrust,
+    write: (s) => process.stderr.write(s),
+    what: `bundle '${entry.name}'`,
+  });
+
   if (result.changed) {
     writeLock(lockPath, result.lock);
     const parts: string[] = [];
@@ -64,14 +99,17 @@ export function runInstall(rest: string[], env: NodeJS.ProcessEnv, cwd: string):
   return 0;
 }
 
-function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: string } {
+function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: string; yes: boolean } {
   let frozen = false;
+  let yes = false;
   let bundleFlag: string | undefined;
   const positionals: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a === "--frozen") {
       frozen = true;
+    } else if (a === "--yes") {
+      yes = true;
     } else if (a === "--bundle") {
       const v = rest[i + 1];
       if (v === undefined || v.startsWith("-")) throw new UsageError("--bundle requires a value");
@@ -99,7 +137,7 @@ function parseInstallArgs(rest: string[]): { frozen: boolean; bundleFlag?: strin
     }
     bundleFlag = positionals[0];
   }
-  return { frozen, ...(bundleFlag !== undefined ? { bundleFlag } : {}) };
+  return { frozen, yes, ...(bundleFlag !== undefined ? { bundleFlag } : {}) };
 }
 
 /**

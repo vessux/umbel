@@ -178,8 +178,8 @@ umbel build [name] [--no-cache]         # warm cache, print path
 umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cache (--vanilla = pin "no bundle")
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
-umbel add <coord> [leaf] [--bundle <name>]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
-umbel install [--frozen] [--bundle <name>]  # reconcile deps ↔ lock + fetch (--frozen: strict, reproducible, writes nothing)
+umbel add <coord> [leaf] [--bundle <name>] [--yes]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
+umbel install [--frozen] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict, reproducible, writes nothing)
 umbel init                              # multi-step authoring wizard
 umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
@@ -209,6 +209,33 @@ open a picker — **full** or **scoped**, depending on the pin:
 `show` and `build` always use the full picker but pre-select the default
 candidate when a pin is present. The current pin (or vanilla pin) is
 pre-selected in all picker contexts where it applies.
+
+## Trust
+
+umbel fetches third-party code, so integrity is always on: every lock entry
+pins a **content hash** of the dependency's resolved tree, and `install
+--frozen` errors (exit 2) on any drift from it.
+
+On top of integrity, a **trust gate** covers the artifacts umbel wires to
+**auto-run** — hooks (fire on tool events) and MCP servers (spawn at launch).
+When `add` or `install` pulls executable content that is **new to, or changed
+from, the lock**, umbel shows a file-level diff of the affected hook/MCP
+directory and asks you to confirm before writing the lock:
+
+- The confirmation unit is the **whole artifact directory's** content hash, not
+  the command string — a malicious update can keep `command: ./run.sh`
+  byte-identical while rewriting the script body, so the diff drills into the
+  changed files.
+- **Already-trusted, locked content passes silently.** `run` / `apply` /
+  `build` (and `install --frozen`) materialize the committed lock without
+  prompting — CI is expected to run against a committed lock.
+- **Non-interactive runs fail closed** (exit 5) on new/changed executable
+  content; pass `--yes` to trust it without a prompt.
+- **Skills and agents are outside the gate.** A `SKILL.md` can itself instruct
+  the agent to run a script, so there is no safe subset to carve out —
+  skill/agent execution is mediated by the harness's own permission system, not
+  umbel's. This is a deliberate scope line (see
+  [ADR-0014](docs/adr/0014-artifact-trust-gate.md)), not an oversight.
 
 ## PATH shim (recommended)
 
@@ -306,6 +333,7 @@ Arg and env bypass the picker entirely and are not constrained to the pin's cand
 | 2    | Usage error (bad flag, validation error, picker on non-TTY)     |
 | 3    | Bundle / dependency / parent not found                          |
 | 4    | Conflict without `--force` (shim install)                       |
+| 5    | Trust gate: executable (hook/MCP) content not confirmed         |
 
 ## Troubleshooting
 
