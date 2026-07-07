@@ -13,11 +13,7 @@ import { addDepEdit } from "./manifest-edit.ts";
 import { checkoutPath, ensureCheckout } from "./store.ts";
 import { gateTrust, planTrust } from "./trust.ts";
 
-export async function runAdd(
-  rest: string[],
-  env: NodeJS.ProcessEnv,
-  cwd: string,
-): Promise<number> {
+export async function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
   const { coordinateArg, leafArg, bundleFlag, yes } = parseAddArgs(rest);
   const coord = parseCoordinate(coordinateArg);
   const alias = deriveAlias(coord);
