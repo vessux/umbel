@@ -1,3 +1,4 @@
+import { UsageError } from "../errors.ts";
 import { githubUrl, parseCoordinate } from "./coordinate.ts";
 import { type LockEntry, type LockFile, serializeLock } from "./lock.ts";
 import { ensureCheckout } from "./store.ts";
@@ -64,6 +65,54 @@ export function reconcile(opts: ReconcileOpts): ReconcileResult {
   return { lock: nextLock, changed, added, removed, kept };
 }
 
-function reconcileFrozen(_opts: ReconcileOpts): ReconcileResult {
-  throw new Error("frozen reconcile not implemented yet");
+function reconcileFrozen(opts: ReconcileOpts): ReconcileResult {
+  const { deps, lock, storeRoot, env } = opts;
+  if (!lock) {
+    if (Object.keys(deps).length === 0) {
+      return { lock: { version: 1, deps: {} }, changed: false, added: [], removed: [], kept: [] };
+    }
+    throw new UsageError(
+      "umbel install --frozen: no lock file found; run 'umbel install' first to create one",
+    );
+  }
+
+  const drift: string[] = [];
+  for (const alias of Object.keys(deps)) {
+    const coordRaw = deps[alias]!;
+    const locked = lock.deps[alias];
+    if (!locked) {
+      drift.push(`'${alias}' is in the manifest but not the lock`);
+    } else if (locked.coordinate !== coordRaw) {
+      drift.push(`'${alias}' coordinate differs (manifest ${coordRaw} ≠ lock ${locked.coordinate})`);
+    }
+  }
+  for (const alias of Object.keys(lock.deps)) {
+    if (!(alias in deps)) drift.push(`'${alias}' is in the lock but not the manifest`);
+  }
+  if (drift.length > 0) {
+    throw new UsageError(`umbel install --frozen: manifest/lock drift:\n  ${drift.join("\n  ")}`);
+  }
+
+  for (const alias of Object.keys(lock.deps)) {
+    const locked = lock.deps[alias]!;
+    const coord = parseCoordinate(locked.coordinate);
+    const checkout = ensureCheckout({
+      coord,
+      url: githubUrl(coord, env),
+      storeRoot,
+      lockedCommit: locked.commit,
+    });
+    if (checkout.commit !== locked.commit) {
+      throw new UsageError(
+        `umbel install --frozen: '${alias}' resolved to ${checkout.commit.slice(0, 12)} but the lock pins ${locked.commit.slice(0, 12)}`,
+      );
+    }
+    if (checkout.contentHash !== locked.contentHash) {
+      throw new UsageError(
+        `umbel install --frozen: '${alias}' content changed for the locked commit ${locked.commit.slice(0, 12)} (expected ${locked.contentHash.slice(0, 12)}, got ${checkout.contentHash.slice(0, 12)})`,
+      );
+    }
+  }
+
+  return { lock, changed: false, added: [], removed: [], kept: Object.keys(lock.deps) };
 }

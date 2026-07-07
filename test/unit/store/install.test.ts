@@ -102,3 +102,72 @@ describe("reconcile (non-frozen)", () => {
     expect(r.lock.deps.lib).toEqual(lock.deps.lib); // untouched
   });
 });
+
+describe("reconcile (frozen)", () => {
+  let root: string;
+  let env: NodeJS.ProcessEnv;
+  let storeRoot: string;
+  let toolsCommit: string;
+
+  beforeEach(() => {
+    root = makeTmpDir();
+    toolsCommit = makeGitFixture(join(root, "gh/acme/tools"), {
+      "skills/greet/SKILL.md": "---\nname: greet\n---\nhi\n",
+    });
+    storeRoot = join(root, "store");
+    env = { UMBEL_GITHUB_BASE: `file://${join(root, "gh")}` };
+  });
+  afterEach(() => cleanup(root));
+
+  function lockOf(hash = "c".repeat(64)) {
+    return {
+      version: 1 as const,
+      deps: {
+        tools: { coordinate: "github:acme/tools@v1", commit: toolsCommit, contentHash: hash },
+      },
+    };
+  }
+
+  it("errors when the manifest has a dep missing from the lock", () => {
+    expect(() =>
+      reconcile({ deps: { tools: "github:acme/tools@v1" }, lock: null, storeRoot, env, frozen: true }),
+    ).toThrow(/frozen/i);
+  });
+
+  it("errors when the lock has an entry not in the manifest", () => {
+    expect(() => reconcile({ deps: {}, lock: lockOf(), storeRoot, env, frozen: true })).toThrow(
+      /drift|not the manifest/i,
+    );
+  });
+
+  it("errors when a coordinate differs between manifest and lock", () => {
+    expect(() =>
+      reconcile({ deps: { tools: "github:acme/tools@v2" }, lock: lockOf(), storeRoot, env, frozen: true }),
+    ).toThrow(/coordinate|drift/i);
+  });
+
+  it("materializes the exact locked commit, writes nothing, reports no change", () => {
+    // The lock's contentHash must be REAL so the integrity assert passes; get it
+    // from a non-frozen resolve, then purge the store and frozen-materialize.
+    const real = reconcile({
+      deps: { tools: "github:acme/tools@v1" },
+      lock: null,
+      storeRoot,
+      env,
+      frozen: false,
+    }).lock;
+    rmSync(storeRoot, { recursive: true, force: true });
+
+    const r = reconcile({ deps: { tools: "github:acme/tools@v1" }, lock: real, storeRoot, env, frozen: true });
+    expect(r.changed).toBe(false);
+    expect(r.lock).toBe(real); // same object, unmodified
+    expect(
+      existsSync(
+        join(
+          checkoutPath(storeRoot, parseCoordinate("github:acme/tools@v1"), toolsCommit),
+          "skills/greet/SKILL.md",
+        ),
+      ),
+    ).toBe(true);
+  });
+});
