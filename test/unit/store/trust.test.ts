@@ -1,7 +1,13 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { decideTrust, listExecArtifacts } from "../../../src/store/trust.ts";
+import {
+  decideTrust,
+  listExecArtifacts,
+  planTrust,
+  renderTrustDiff,
+  unifiedDiff,
+} from "../../../src/store/trust.ts";
 import { cleanup, makeTmpDir, writeFile } from "../../helpers/tmp.ts";
 
 describe("listExecArtifacts", () => {
@@ -71,5 +77,63 @@ describe("decideTrust", () => {
       { kind: "hooks" as const, leaf: "a", ref: "hooks/a", dir: "/x/a", contentHash: "aa" },
     ];
     expect(decideTrust(new Map([["hooks/a", "aa"]]), after)).toEqual([]);
+  });
+});
+
+describe("unifiedDiff", () => {
+  it("shows removed and added lines with +/- markers and keeps context", () => {
+    const d = unifiedDiff("echo A\nkeep\n", "echo B\nkeep\n");
+    expect(d).toContain("-echo A");
+    expect(d).toContain("+echo B");
+    expect(d).toContain(" keep");
+  });
+
+  it("is empty for identical content", () => {
+    expect(unifiedDiff("same\n", "same\n").trim()).toBe("");
+  });
+});
+
+describe("planTrust + renderTrustDiff", () => {
+  let root: string;
+  beforeEach(() => {
+    root = makeTmpDir();
+  });
+  afterEach(() => cleanup(root));
+
+  it("marks every artifact 'added' when there is no prior checkout", () => {
+    const after = join(root, "after");
+    writeFile(join(after, "hooks/fmt/HOOK.md"), "---\nevent: Stop\ncommand: ./run.sh\n---\n");
+    writeFile(join(after, "hooks/fmt/run.sh"), "#!/bin/sh\necho A\n");
+    const changes = planTrust(null, after);
+    expect(changes.map((c) => [c.ref, c.status])).toEqual([["hooks/fmt", "added"]]);
+    const rendered = renderTrustDiff(changes);
+    expect(rendered).toContain("hooks/fmt");
+    expect(rendered).toContain("echo A");
+  });
+
+  it("marks a changed hook body 'changed' and drills into run.sh", () => {
+    const before = join(root, "before");
+    const after = join(root, "after");
+    for (const dir of [before, after]) {
+      writeFile(join(dir, "hooks/fmt/HOOK.md"), "---\nevent: Stop\ncommand: ./run.sh\n---\n");
+    }
+    writeFile(join(before, "hooks/fmt/run.sh"), "#!/bin/sh\necho A\n");
+    writeFile(join(after, "hooks/fmt/run.sh"), "#!/bin/sh\necho B\n");
+    const changes = planTrust(before, after);
+    expect(changes.map((c) => [c.ref, c.status])).toEqual([["hooks/fmt", "changed"]]);
+    const rendered = renderTrustDiff(changes);
+    expect(rendered).toContain("run.sh");
+    expect(rendered).toContain("echo A"); // old body present
+    expect(rendered).toContain("echo B"); // new body present
+  });
+
+  it("does not flag an unchanged artifact", () => {
+    const before = join(root, "before");
+    const after = join(root, "after");
+    for (const dir of [before, after]) {
+      writeFile(join(dir, "hooks/fmt/HOOK.md"), "---\nevent: Stop\ncommand: ./run.sh\n---\n");
+      writeFile(join(dir, "hooks/fmt/run.sh"), "#!/bin/sh\necho same\n");
+    }
+    expect(planTrust(before, after)).toEqual([]);
   });
 });
