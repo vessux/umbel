@@ -228,4 +228,68 @@ describe("resolveSources", () => {
       expect(err.message).toMatch(/not supported yet/);
     });
   });
+
+  describe("link & built-in local deps", () => {
+    it("resolves a declared link: dependency's skill live, with no lock", () => {
+      const libDir = join(root, "mylib");
+      const greet = mkSubArtifact(libDir, "skills", "greet");
+      const out = resolveSources(bundle({ skills: ["mylib/greet"] }), {
+        roots,
+        env: {},
+        store: { deps: { mylib: `link:${libDir}` }, lock: undefined, root: join(root, "store") },
+      });
+      expect(out.skills.get("mylib/greet")).toBe(greet);
+      expect(out.storePins?.has("skills/mylib/greet")).toBeFalsy();
+    });
+
+    it("resolves the built-in local dependency kind-first under ${UMBEL_HOME}/local", () => {
+      const cfg = join(root, "cfg");
+      const mine = join(cfg, "local", "skills", "mine");
+      mkdirSync(mine, { recursive: true });
+      writeFileSync(join(mine, "SKILL.md"), "---\nname: mine\n---\nbody\n");
+      const out = resolveSources(bundle({ skills: ["local/mine"] }), {
+        roots,
+        env: { UMBEL_ARTIFACTS_DIR: cfg },
+      });
+      expect(out.skills.get("local/mine")).toBe(mine);
+      expect(out.storePins?.has("skills/local/mine")).toBeFalsy();
+    });
+
+    it("built-in local falls back to the legacy pool when the leaf isn't under local/", () => {
+      const cfg = join(root, "cfg-empty");
+      const poolDir = mkSubArtifact(roots.skills, "local", "tdd");
+      const out = resolveSources(bundle({ skills: ["local/tdd"] }), {
+        roots,
+        env: { UMBEL_ARTIFACTS_DIR: cfg },
+      });
+      expect(out.skills.get("local/tdd")).toBe(poolDir);
+    });
+
+    it("built-in local skips an incomplete local dir (no SKILL.md) and falls back to the pool", () => {
+      const cfg = join(root, "cfg-incomplete");
+      mkdirSync(join(cfg, "local", "skills", "tdd"), { recursive: true }); // dir exists, no SKILL.md
+      const poolDir = mkSubArtifact(roots.skills, "local", "tdd");
+      const out = resolveSources(bundle({ skills: ["local/tdd"] }), {
+        roots,
+        env: { UMBEL_ARTIFACTS_DIR: cfg },
+      });
+      expect(out.skills.get("local/tdd")).toBe(poolDir);
+    });
+
+    it("errors NotFound when a link dependency's path does not exist", () => {
+      const err = thrown(() =>
+        resolveSources(bundle({ skills: ["mylib/greet"] }), {
+          roots,
+          env: {},
+          store: {
+            deps: { mylib: `link:${join(root, "nope")}` },
+            lock: undefined,
+            root: join(root, "store"),
+          },
+        }),
+      );
+      expect(err.name).toBe("NotFoundError");
+      expect(err.message).toMatch(/link path.*does not exist/);
+    });
+  });
 });

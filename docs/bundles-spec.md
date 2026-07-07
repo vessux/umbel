@@ -830,6 +830,13 @@ shape; a ref whose alias appears in `deps:` resolves through the **store**
 (`$XDG_DATA_HOME/umbel/store/github/<org>/<repo>/<commit>/`), all other refs
 resolve against the artifact pool as before.
 
+Coordinates today: `github:<org>/<repo>@<tag>` (fetched + pinned), `link:<path>`
+(a local directory — unlocked, live), and the built-in `local` dependency
+(≙ `link:${UMBEL_HOME}/local`, hand-authored artifacts, kind-first under
+`${UMBEL_HOME}/local/<kind>/<leaf>/`). `local` needs no `deps:` entry — a bare
+`local/<leaf>` ref resolves against it, falling back to the legacy pool when the
+leaf isn't present there.
+
 ```yaml
 ---
 name: dev
@@ -848,5 +855,18 @@ the checkout tree; for store-resolved artifacts the compile hash keys on that
 pin (not source mtimes), so the same lock produces the same compiled bundle on
 any machine. Re-running the same `add` is a no-op (no re-fetch, no lock churn).
 
-Tracer limits: `github:` pinned refs only; skills only (the hook/MCP trust gate
-is ADR-0014, a later slice); `deps:` cannot be combined with `extends:` yet.
+`link:` paths expand `${…}` variables from the environment (`${HOME}`,
+`${UMBEL_HOME}`, …); an undefined variable is a hard error, and expansion is
+**rejected** in `github:` coordinates (a git coordinate must resolve identically
+on every machine). `link:`/`local` deps are **not reproducible** — they never
+enter the lock and carry no pin (their skills are compile-hashed by mtime, like
+the pool). Flipping a dep's coordinate from `link:` to a git URL is therefore a
+one-line change that leaves every `<alias>/<leaf>` ref valid: `install` drops the
+stale pin (or mints a new one) without touching the refs. Because git coordinates
+are the reproducible subset, `install --frozen` hard-errors on an unresolvable
+`link:` path (pass `--allow-missing` to tolerate it).
+
+Slice limits: `github:` and `link:`/`local` only (`git:` and `#subpath` pending);
+skills only for store-/link-backed refs (the hook/MCP trust gate is ADR-0014, an
+earlier slice, and covers fetched executable content — `local`/`link:` content is
+your own and is not gated); `deps:` cannot be combined with `extends:` yet.

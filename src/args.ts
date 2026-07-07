@@ -10,7 +10,7 @@ Bundle verbs:
   umbel unpin                         Remove the project's pin file.
   umbel run [name] [-- ...]           Launch claude with bundle flags, or vanilla if no pin/picker chose so.
   umbel add <coord> [leaf] [--bundle <name>]  Fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill.
-  umbel install [--frozen] [--bundle <name>]  Reconcile deps ↔ lock + fetch (--frozen: strict, reproducible, writes nothing).
+  umbel install [--frozen] [--allow-missing] [--bundle <name>]  Reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path).
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
   umbel shim install [--force]        Install the PATH shim (~/.local/share/umbel/bin/claude).
