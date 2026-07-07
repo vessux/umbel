@@ -97,7 +97,11 @@ export async function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string
     priorLocked.contentHash !== checkout.contentHash;
   if (changedDep) {
     let beforeDir: string | null = null;
-    if (priorLocked !== undefined) {
+    // A prior checkout is a meaningful "before" only at a *different* commit.
+    // Same coordinate + same commit ⇒ the prior dir *is* checkout.dir, so
+    // diffing against it would be empty; if we still got here the store's bytes
+    // drifted from the lock — show it all as new (gate) rather than silently.
+    if (priorLocked !== undefined && priorLocked.commit !== checkout.commit) {
       const priorDir = checkoutPath(storeRootDir(env), coord, priorLocked.commit);
       if (existsSync(priorDir)) beforeDir = priorDir;
     }

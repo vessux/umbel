@@ -1,7 +1,11 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { TrustError } from "../errors.ts";
 import { hashTree } from "./content-hash.ts";
+
+/** Files past this size, or with a NUL byte, are summarized rather than line-diffed. */
+const DIFF_MAX_BYTES = 32 * 1024;
 
 export type ExecKind = "hooks" | "mcps";
 
@@ -100,10 +104,33 @@ function listDirFiles(dir: string): string[] {
   return out;
 }
 
-/** Relative path → UTF-8 bytes for every file in an artifact dir (trees are small). */
-function fileMap(dir: string): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const rel of listDirFiles(dir)) out.set(rel, readFileSync(join(dir, rel), "utf8"));
+/** Relative path → raw bytes for every file in an artifact dir (trees are small). */
+function artifactFiles(dir: string): Map<string, Buffer> {
+  const out = new Map<string, Buffer>();
+  for (const rel of listDirFiles(dir)) out.set(rel, readFileSync(join(dir, rel)));
+  return out;
+}
+
+/** Text small enough to line-diff, and not binary (no NUL byte). */
+function isDiffable(buf: Buffer): boolean {
+  return buf.length <= DIFF_MAX_BYTES && !buf.includes(0);
+}
+
+/**
+ * Neutralize control bytes in a line before it reaches the terminal. The diff
+ * renders attacker-controlled file bytes; without this, an artifact could embed
+ * ANSI/cursor/carriage-return escapes to overwrite or conceal the very lines a
+ * reviewer must see, spoofing the diff the gate exists to present. Tabs (0x09)
+ * are kept for script legibility; every other C0/C1 control + DEL is escaped.
+ */
+function sanitizeDiffLine(line: string): string {
+  let out = "";
+  for (let i = 0; i < line.length; i++) {
+    const code = line.charCodeAt(i);
+    const control =
+      code <= 0x08 || (code >= 0x0b && code <= 0x1f) || (code >= 0x7f && code <= 0x9f);
+    out += control ? `\\x${code.toString(16).padStart(2, "0")}` : line[i];
+  }
   return out;
 }
 
@@ -142,22 +169,38 @@ export function unifiedDiff(before: string, after: string): string {
   return changed ? lines.join("\n") : "";
 }
 
+/** A byte-count + short hash so a summarized (binary/oversized) file's change is still visible. */
+function fileSummary(buf: Buffer | undefined): string {
+  if (buf === undefined) return "absent";
+  return `${buf.length} bytes, sha ${createHash("sha256").update(buf).digest("hex").slice(0, 8)}`;
+}
+
 /** Human-readable, file-level diff of the changes returned by planTrust. */
 export function renderTrustDiff(changes: TrustChange[]): string {
   const out: string[] = [];
   for (const c of changes) {
     out.push(`  ${c.ref}  (${c.status === "added" ? "new" : "changed"})`);
-    const before = c.beforeDir ? fileMap(c.beforeDir) : new Map<string, string>();
-    const after = fileMap(c.afterDir);
+    const before = c.beforeDir ? artifactFiles(c.beforeDir) : new Map<string, Buffer>();
+    const after = artifactFiles(c.afterDir);
     const files = [...new Set([...before.keys(), ...after.keys()])].sort();
     for (const f of files) {
       const b = before.get(f);
       const a = after.get(f);
-      if (b === a) continue;
+      if (b && a && b.equals(a)) continue;
       const mark = b === undefined ? "+" : a === undefined ? "-" : "~";
       out.push(`    ${mark} ${f}`);
-      for (const line of unifiedDiff(b ?? "", a ?? "").split("\n")) {
-        if (line.trim() !== "") out.push(`      ${line}`);
+      if ((b && !isDiffable(b)) || (a && !isDiffable(a))) {
+        // Binary or oversized: don't dump bytes to the terminal; summarize so a
+        // reviewer still sees that (and by how much) it changed.
+        out.push(`      (content not shown — ${fileSummary(b)} → ${fileSummary(a)})`);
+        continue;
+      }
+      for (const line of unifiedDiff(b?.toString("utf8") ?? "", a?.toString("utf8") ?? "").split(
+        "\n",
+      )) {
+        // Drop only the empty trailing-newline context line (" "); keep +/- lines
+        // even when whitespace-only, and sanitize before it reaches the terminal.
+        if (line !== " ") out.push(`      ${sanitizeDiffLine(line)}`);
       }
     }
   }
