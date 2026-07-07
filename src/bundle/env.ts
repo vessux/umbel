@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve as pathResolve } from "node:path";
-import { findClaudeBundlesDir } from "../target/walk.ts";
+import { findClaudeBundlesDir } from "../claude-dirs.ts";
 import type { ArtifactRoots } from "./resolve.ts";
 
 /**

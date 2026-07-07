@@ -28,13 +28,6 @@ export class ConflictError extends CliError {
   }
 }
 
-export class ApplyError extends CliError {
-  constructor(message: string) {
-    super(message, 1);
-    this.name = "ApplyError";
-  }
-}
-
 export class CancelledError extends Error {
   constructor() {
     super("cancelled");

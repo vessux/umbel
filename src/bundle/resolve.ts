@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { isDir } from "../claude-dirs.ts";
 import { NotFoundError, UsageError } from "../errors.ts";
 import { skillDirIn } from "../store/artifacts.ts";
 import { parseCoordinate } from "../store/coordinate.ts";
 import type { LockFile } from "../store/lock.ts";
 import { checkoutPath } from "../store/store.ts";
-import { isDir } from "../target/walk.ts";
 import type { ResolvedBundle } from "./compose.ts";
 import { ARTIFACT_KINDS, type ArtifactKind } from "./kinds.ts";
 

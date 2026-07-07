@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export interface AncestorOpts {
-  /** When true (default for project-skills/bundles walks), stop at the nearest `.git/`. */
+  /** When true (default for project-scope bundle walks), stop at the nearest `.git/`. */
   stopAtGit?: boolean;
 }
 
@@ -11,8 +11,8 @@ export interface AncestorOpts {
  * Returns the ancestor dir itself (caller composes the subpath). Returns null
  * when none is found before reaching `home` or filesystem root.
  *
- * The `.git` boundary is opt-in: project-scope bundle/skills lookups stop at
- * the nearest repo (true), while pin-file lookups intentionally cross repo
+ * The `.git` boundary is opt-in: project-scope bundle lookups stop at the
+ * nearest repo (true), while pin-file lookups intentionally cross repo
  * boundaries (false) so a `.claude/` at a parent dir still wins.
  */
 export function findClaudeAncestor(
@@ -31,11 +31,6 @@ export function findClaudeAncestor(
     if (parent === dir) return null;
     dir = parent;
   }
-}
-
-export function findClaudeSkillsDir(start: string, home: string): string | null {
-  const ancestor = findClaudeAncestor(start, home, { stopAtGit: true });
-  return ancestor === null ? null : join(ancestor, ".claude", "skills");
 }
 
 export function findClaudeBundlesDir(start: string, home: string): string | null {

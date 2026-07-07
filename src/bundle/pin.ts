@@ -1,6 +1,6 @@
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { findClaudeAncestor } from "../target/walk.ts";
+import { findClaudeAncestor } from "../claude-dirs.ts";
 
 const PIN_FILE = ".umbel-bundle";
 const VANILLA_SENTINEL = "__vanilla__";
@@ -33,7 +33,7 @@ export function parsePin(raw: string): ParsedPin {
 
 /**
  * Walk to the nearest `.claude/` ancestor. Pin lookups cross `.git`
- * boundaries (unlike bundle/skills discovery) so a `.claude/` at a parent
+ * boundaries (unlike bundle discovery) so a `.claude/` at a parent
  * still wins inside a vendored subrepo.
  */
 export function findProjectRoot(start: string, home: string): string | null {

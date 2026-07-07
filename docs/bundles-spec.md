@@ -129,10 +129,6 @@ identity.
 no flat-namespace fallback, no automatic search of subfolders. Each ref
 must spell out its source.
 
-`--source <path>` overrides the parent of all artifact roots; the path must
-point at a subfoldered root (i.e. one whose immediate children are source
-subfolders). Per-artifact root override is not in scope.
-
 ## Composition
 
 `extends: [a, b, c]` declares a chain of parents. Resolution:
@@ -700,7 +696,6 @@ umbel init                                        # wizard
 umbel build  [<name>] [--no-cache]                # warm cache
 umbel gc                                          # prune cache
 umbel shim   install [--force] | uninstall | path # PATH-shim for `claude`
-umbel skills [options]                            # low-level skill picker (v0)
 umbel                                             # help
 ```
 
