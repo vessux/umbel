@@ -36,6 +36,7 @@ import { CliError } from "./errors.ts";
 import { installShim, uninstallShim } from "./shim/install.ts";
 import { runAdd } from "./store/add.ts";
 import { runInstall } from "./store/install.ts";
+import { isInteractive } from "./tty.ts";
 import { runInitWizard } from "./ui/bundle-init.ts";
 import { VANILLA_PICK, pickBundle, pickScopedBundle } from "./ui/bundle-picker.ts";
 
@@ -169,11 +170,6 @@ function runBundleInit(env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
     home: homedir(),
     artifactRoots: artifactRoots(env),
   });
-}
-
-function isInteractive(env: NodeJS.ProcessEnv): boolean {
-  if (env.NO_TTY === "1") return false;
-  return Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
 }
 
 async function pickBundleOrError(
