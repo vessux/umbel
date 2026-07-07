@@ -428,7 +428,7 @@ function buildBundle(
   env: NodeJS.ProcessEnv,
   forceRebuild = false,
 ): { cacheDir: string; warnings: string[] } {
-  const { resolved, sources, warnings } = resolveBundle(name, index, env);
+  const { resolved, sources, warnings } = resolveBundle(name, index, env, { materialize: true });
   const { cacheDir } = compile(resolved, sources, {
     cacheRoot: bundleCacheRoot(env),
     forceRebuild,

@@ -93,4 +93,22 @@ describe("umbel install (integration)", () => {
     expect(r.stderr).toMatch(/drift|frozen/i);
     expect(readFileSync(lockPath(), "utf8")).toBe(lockBefore); // unchanged
   });
+
+  it("build auto-materializes a missing store checkout before compiling", () => {
+    expect(umbel("add", "github:acme/tools@v1", "--bundle", "dev").status).toBe(0);
+    const commit = JSON.parse(readFileSync(lockPath(), "utf8")).deps.tools.commit;
+
+    // simulate a purged store (or a recipient who only has bundle.md + lock)
+    rmSync(join(root, "data/store"), { recursive: true, force: true });
+    expect(existsSync(join(root, "data/store/github/acme/tools", commit))).toBe(false);
+
+    const r = umbel("build", "dev");
+    expect(r.status).toBe(0);
+    const cacheDir = r.stdout.trim().split("\n").pop()!;
+    expect(readFileSync(join(cacheDir, "skills/greet/SKILL.md"), "utf8")).toContain("hello");
+    // the store was re-materialized from the lock:
+    expect(
+      existsSync(join(root, "data/store/github/acme/tools", commit, "skills/greet/SKILL.md")),
+    ).toBe(true);
+  });
 });
