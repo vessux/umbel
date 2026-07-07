@@ -1,16 +1,15 @@
-import { parseDocument } from "yaml";
+import { type Document, isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { UsageError } from "../errors.ts";
 
 const FM_RE = /^---\n([\s\S]*?)\n---(\n|$)/;
+const REF_LISTS = ["skills", "agents", "hooks", "mcps"] as const;
 
 /**
- * Minimal comment-preserving `add` edit: set deps.<alias> and append the ref
- * to `skills:` if absent. Operates on the yaml Document API so hand-written
- * comments survive (ADR-0015); the full authoring writer is slice #56.
- * Overwrites an existing deps.<alias> binding unconditionally; the caller
- * detects alias↔coordinate conflicts.
+ * Split the frontmatter, run `fn` on its yaml Document, re-emit. Comments in the
+ * frontmatter and the Markdown body are preserved (ADR-0015) — the yaml Document
+ * API keeps comments on nodes it doesn't touch.
  */
-export function addDepEdit(raw: string, alias: string, coordinate: string, ref: string): string {
+function withFrontmatterDoc(raw: string, fn: (doc: Document) => void): string {
   const m = FM_RE.exec(raw);
   if (!m) {
     throw new UsageError("bundle manifest has no frontmatter block; cannot edit");
@@ -21,15 +20,62 @@ export function addDepEdit(raw: string, alias: string, coordinate: string, ref: 
       `bundle manifest has invalid YAML frontmatter: ${doc.errors[0]!.message.split("\n", 1)[0]}`,
     );
   }
-  doc.setIn(["deps", alias], coordinate);
-  const current = (doc.toJS() as { skills?: unknown }).skills;
-  if (current === undefined) {
-    doc.set("skills", [ref]);
-  } else if (Array.isArray(current) && !current.includes(ref)) {
-    doc.addIn(["skills"], ref);
-  } else if (!Array.isArray(current)) {
-    throw new UsageError("bundle manifest 'skills' is not a list; cannot edit");
-  }
+  fn(doc);
   const body = raw.slice(m[0].length);
   return `---\n${doc.toString()}---\n${body}`;
+}
+
+/** Remove seq items matching `pred`; delete the key entirely if the list empties. */
+function removeFromList(doc: Document, key: string, pred: (s: string) => boolean): void {
+  const node = doc.get(key);
+  if (!isSeq(node)) return;
+  node.items = node.items.filter((it) => !pred(isScalar(it) ? String(it.value) : String(it)));
+  if (node.items.length === 0) doc.delete(key);
+}
+
+/**
+ * Minimal comment-preserving `add` edit: set deps.<alias> and append the ref to
+ * `skills:` if absent. Overwrites an existing deps.<alias> binding
+ * unconditionally; the caller detects alias↔coordinate conflicts.
+ */
+export function addDepEdit(raw: string, alias: string, coordinate: string, ref: string): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    doc.setIn(["deps", alias], coordinate);
+    const current = (doc.toJS() as { skills?: unknown }).skills;
+    if (current === undefined) {
+      doc.set("skills", [ref]);
+    } else if (Array.isArray(current) && !current.includes(ref)) {
+      doc.addIn(["skills"], ref);
+    } else if (!Array.isArray(current)) {
+      throw new UsageError("bundle manifest 'skills' is not a list; cannot edit");
+    }
+  });
+}
+
+/**
+ * Drop `deps.<alias>` and every `<alias>/<leaf>` composition ref across all ref
+ * lists; delete list keys (and the deps map) that become empty.
+ */
+export function removeDepEdit(raw: string, alias: string): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    doc.deleteIn(["deps", alias]);
+    const deps = doc.get("deps");
+    if (isMap(deps) && deps.items.length === 0) doc.delete("deps");
+    const prefix = `${alias}/`;
+    for (const list of REF_LISTS) removeFromList(doc, list, (s) => s.startsWith(prefix));
+  });
+}
+
+/** Remove one exact `<alias>/<leaf>` ref wherever it appears; leave deps alone. */
+export function removeRefEdit(raw: string, ref: string): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    for (const list of REF_LISTS) removeFromList(doc, list, (s) => s === ref);
+  });
+}
+
+/** Rewrite the frontmatter `name:` field (for fork). */
+export function renameBundleEdit(raw: string, newName: string): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    doc.set("name", newName);
+  });
 }
