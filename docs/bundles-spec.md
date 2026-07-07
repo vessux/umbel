@@ -744,9 +744,11 @@ Non-interactive, comment-preserving edit of the target bundle's `bundle.md`
   alias's last ref, a hint suggests `umbel remove <alias>` to drop the now-unused
   dependency.
 
-`remove` only edits the target bundle's *own* manifest; a ref that exists solely
-via `extends` is not removable (exit 3, with a `fork`-to-diverge hint). Removal
-never introduces executable content, so it runs no trust gate.
+`remove` only edits the target bundle's *own* manifest; a ref not present there
+is a not-found error (exit 3). When the bundle has an `extends`, the error adds a
+"if it's inherited via `extends`, `umbel fork` to diverge" hint — a heuristic
+prompt, not a precise inheritance check (true detection would require resolving
+the parent chain). Removal never introduces executable content, so no trust gate.
 
 ### `umbel fork`
 

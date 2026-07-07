@@ -106,6 +106,15 @@ describe("resolveTargetOrPick", () => {
     expect(c.stderr).not.toHaveBeenCalled();
   });
 
+  it("multiple with a single non-vanilla candidate auto-resolves it (no picker)", async () => {
+    const c = ctx(false, [entry({ name: "web", scope: "project" })]);
+    const e = await resolveTargetOrPick(
+      { kind: "multiple", candidates: [{ kind: "vanilla" }, { kind: "bundle", name: "web" }] },
+      c,
+    );
+    expect(e.name).toBe("web");
+  });
+
   it("multiple + non-interactive throws", async () => {
     const c = ctx(false, []);
     await expect(

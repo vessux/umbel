@@ -16,6 +16,7 @@ skills:
   - local/mine
 agents:
   - tdd/planner
+  - local/helper
 ---
 `;
 
@@ -77,6 +78,15 @@ describe("runRemove", () => {
       await expect(runRemove(["tdd/ghost", "--bundle", "web"], env, root)).rejects.toThrow(
         NotFoundError,
       );
+    });
+
+    it("removes a ref from a non-skills list (agents)", async () => {
+      await runRemove(["tdd/planner", "--bundle", "web"], env, root);
+      const out = readFileSync(mdPath, "utf8");
+      expect(out).not.toContain("tdd/planner");
+      expect(out).toContain("local/helper"); // sibling agent ref kept
+      expect(out).toContain("tdd/writing"); // skill ref untouched
+      expect(out).toContain("tdd: github:org/tdd@v1"); // dep kept
     });
   });
 });
