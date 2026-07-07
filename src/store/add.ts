@@ -1,17 +1,24 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { storeRootDir } from "../bundle/env.ts";
 import { type BundleIndex, loadBundleIndex } from "../bundle/exec.ts";
 import { readPin } from "../bundle/pin.ts";
 import { UsageError } from "../errors.ts";
+import { isInteractive } from "../tty.ts";
+import { confirmExecTrust } from "../ui/prompt.ts";
 import { listSkillLeaves } from "./artifacts.ts";
 import { deriveAlias, githubUrl, parseCoordinate } from "./coordinate.ts";
 import { type LockFile, lockPathFor, readLock, serializeLock, writeLock } from "./lock.ts";
 import { addDepEdit } from "./manifest-edit.ts";
-import { ensureCheckout } from "./store.ts";
+import { checkoutPath, ensureCheckout } from "./store.ts";
+import { gateTrust, planTrust } from "./trust.ts";
 
-export function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string): number {
-  const { coordinateArg, leafArg, bundleFlag } = parseAddArgs(rest);
+export async function runAdd(
+  rest: string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Promise<number> {
+  const { coordinateArg, leafArg, bundleFlag, yes } = parseAddArgs(rest);
   const coord = parseCoordinate(coordinateArg);
   const alias = deriveAlias(coord);
 
@@ -84,6 +91,30 @@ export function runAdd(rest: string[], env: NodeJS.ProcessEnv, cwd: string): num
   const edited = addDepEdit(raw, alias, coord.raw, ref);
   const manifestChanged = edited !== raw;
 
+  // Trust gate (ADR-0014): confirm new/changed executable (hook/MCP) content
+  // before writing the lock. The prior lock entry (same coordinate) is the
+  // trusted baseline; a matching pin is already-trusted and passes silently.
+  const priorLocked = locked !== undefined && locked.coordinate === coord.raw ? locked : undefined;
+  const changedDep =
+    priorLocked === undefined ||
+    priorLocked.commit !== checkout.commit ||
+    priorLocked.contentHash !== checkout.contentHash;
+  if (changedDep) {
+    let beforeDir: string | null = null;
+    if (priorLocked !== undefined) {
+      const priorDir = checkoutPath(storeRootDir(env), coord, priorLocked.commit);
+      if (existsSync(priorDir)) beforeDir = priorDir;
+    }
+    await gateTrust({
+      changes: planTrust(beforeDir, checkout.dir),
+      interactive: isInteractive(env),
+      yes,
+      confirm: confirmExecTrust,
+      write: (s) => process.stderr.write(s),
+      what: `dependency '${alias}' (${coord.raw})`,
+    });
+  }
+
   if (lockChanged) writeLock(lockPath, nextLock);
   if (manifestChanged) writeFileSync(entry.path, edited);
 
@@ -103,12 +134,16 @@ function parseAddArgs(rest: string[]): {
   coordinateArg: string;
   leafArg?: string;
   bundleFlag?: string;
+  yes: boolean;
 } {
   const positionals: string[] = [];
   let bundleFlag: string | undefined;
+  let yes = false;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
-    if (a === "--bundle") {
+    if (a === "--yes") {
+      yes = true;
+    } else if (a === "--bundle") {
       const v = rest[i + 1];
       if (v === undefined || v.startsWith("-")) throw new UsageError("--bundle requires a value");
       bundleFlag = v;
@@ -132,6 +167,7 @@ function parseAddArgs(rest: string[]): {
     coordinateArg,
     ...(leafArg !== undefined ? { leafArg } : {}),
     ...(bundleFlag !== undefined ? { bundleFlag } : {}),
+    yes,
   };
 }
 

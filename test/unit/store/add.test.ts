@@ -38,8 +38,8 @@ describe("runAdd", () => {
   });
   afterEach(() => cleanup(root));
 
-  it("fetches, locks, and composes the named leaf", () => {
-    const code = runAdd(
+  it("fetches, locks, and composes the named leaf", async () => {
+    const code = await runAdd(
       ["github:acme/tools@v1", "greet", "--bundle", "dev"],
       env,
       join(root, "project"),
@@ -53,19 +53,19 @@ describe("runAdd", () => {
     expect(manifest).toMatch(/- tools\/greet/);
   });
 
-  it("errors with the sorted candidate list when several skills and no leaf given", () => {
-    expect(() => runAdd(["github:acme/tools@v1", "--bundle", "dev"], env, root)).toThrow(
+  it("errors with the sorted candidate list when several skills and no leaf given", async () => {
+    await expect(runAdd(["github:acme/tools@v1", "--bundle", "dev"], env, root)).rejects.toThrow(
       /pick one.*--bundle dev.*farewell, greet/s,
     );
   });
 
-  it("is idempotent: second run rewrites nothing and touches no network", () => {
-    runAdd(["github:acme/tools@v1", "greet", "--bundle", "dev"], env, root);
+  it("is idempotent: second run rewrites nothing and touches no network", async () => {
+    await runAdd(["github:acme/tools@v1", "greet", "--bundle", "dev"], env, root);
     const lockPath = join(root, "config/bundles/dev.lock");
     const lockBefore = snapshotFile(lockPath);
     const manifestBefore = snapshotFile(bundlePath);
     // Poison the upstream URL: an idempotent re-add must not touch the network.
-    const code = runAdd(
+    const code = await runAdd(
       ["github:acme/tools@v1", "greet", "--bundle", "dev"],
       { ...env, UMBEL_GITHUB_BASE: `file://${join(root, "nowhere")}` },
       root,
@@ -79,47 +79,47 @@ describe("runAdd", () => {
     expect(manifestAfter.mtimeMs).toBe(manifestBefore.mtimeMs);
   });
 
-  it("rejects an alias rebind to a different coordinate", () => {
-    runAdd(["github:acme/tools@v1", "greet", "--bundle", "dev"], env, root);
+  it("rejects an alias rebind to a different coordinate", async () => {
+    await runAdd(["github:acme/tools@v1", "greet", "--bundle", "dev"], env, root);
     makeGitFixture(
       join(root, "gh/other/tools"),
       { "skills/x/SKILL.md": "---\nname: x\n---\n" },
       "v9",
     );
-    expect(() => runAdd(["github:other/tools@v9", "x", "--bundle", "dev"], env, root)).toThrow(
-      /alias 'tools' is already bound/,
-    );
+    await expect(
+      runAdd(["github:other/tools@v9", "x", "--bundle", "dev"], env, root),
+    ).rejects.toThrow(/alias 'tools' is already bound/);
   });
 
-  it("errors when no --bundle and no single-bundle pin", () => {
-    expect(() => runAdd(["github:acme/tools@v1", "greet"], env, join(root, "project"))).toThrow(
-      /no target bundle/,
-    );
+  it("errors when no --bundle and no single-bundle pin", async () => {
+    await expect(
+      runAdd(["github:acme/tools@v1", "greet"], env, join(root, "project")),
+    ).rejects.toThrow(/no target bundle/);
   });
 
-  it("resolves the target bundle from a single-candidate pin", () => {
+  it("resolves the target bundle from a single-candidate pin", async () => {
     const project = join(root, "project");
     writeFile(join(project, ".claude", "bundles", ".keep"), "");
     writeFileSync(join(project, ".umbel-bundle"), "dev\n");
-    const code = runAdd(["github:acme/tools@v1", "greet"], env, project);
+    const code = await runAdd(["github:acme/tools@v1", "greet"], env, project);
     expect(code).toBe(0);
   });
 
-  it("accepts the --bundle=<name> form", () => {
-    const code = runAdd(["github:acme/tools@v1", "greet", "--bundle=dev"], env, root);
+  it("accepts the --bundle=<name> form", async () => {
+    const code = await runAdd(["github:acme/tools@v1", "greet", "--bundle=dev"], env, root);
     expect(code).toBe(0);
     expect(readLock(join(root, "config/bundles/dev.lock"))?.deps.tools).toBeDefined();
   });
 
-  it("errors when the --bundle name is not found", () => {
-    expect(() => runAdd(["github:acme/tools@v1", "greet", "--bundle", "ghost"], env, root)).toThrow(
-      /not found/,
-    );
+  it("errors when the --bundle name is not found", async () => {
+    await expect(
+      runAdd(["github:acme/tools@v1", "greet", "--bundle", "ghost"], env, root),
+    ).rejects.toThrow(/not found/);
   });
 
-  it("rejects --bundle= with an empty value", () => {
-    expect(() => runAdd(["github:acme/tools@v1", "greet", "--bundle="], env, root)).toThrow(
-      /--bundle requires a value/,
-    );
+  it("rejects --bundle= with an empty value", async () => {
+    await expect(
+      runAdd(["github:acme/tools@v1", "greet", "--bundle="], env, root),
+    ).rejects.toThrow(/--bundle requires a value/);
   });
 });
