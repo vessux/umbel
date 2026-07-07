@@ -192,12 +192,13 @@ export async function gateTrust(opts: TrustGateOpts): Promise<void> {
   const summary = opts.changes.map((c) => c.ref).join(", ");
   if (!opts.interactive) {
     throw new TrustError(
-      `umbel: ${opts.what} ships new or changed executable content (${summary}); ` +
-        "refusing to trust it on a non-interactive run. Re-run on a TTY to review, or pass --yes to trust it.",
+      `umbel: ${opts.what} ships new or changed executable content (${summary}); refusing to trust it on a non-interactive run. Re-run on a TTY to review, or pass --yes to trust it.`,
     );
   }
   const render = opts.renderer ?? renderTrustDiff;
-  opts.write(`\n${opts.what} ships executable content that will auto-run. Review before trusting:\n`);
+  opts.write(
+    `\n${opts.what} ships executable content that will auto-run. Review before trusting:\n`,
+  );
   opts.write(render(opts.changes));
   const ok = await opts.confirm();
   if (!ok) {

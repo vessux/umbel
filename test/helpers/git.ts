@@ -39,3 +39,18 @@ export function makeGitFixture(
   const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" });
   return r.stdout.trim();
 }
+
+/**
+ * Add a second (or later) commit + lightweight tag to an existing fixture repo.
+ * Returns the new commit sha. Used to exercise a v1→v2 upstream change.
+ */
+export function addCommitTag(dir: string, files: Record<string, string>, tag: string): string {
+  for (const [rel, content] of Object.entries(files)) {
+    writeFile(join(dir, rel), content);
+  }
+  git(dir, "add", "-A");
+  git(dir, "commit", "-q", "-m", tag);
+  git(dir, "tag", tag);
+  const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" });
+  return r.stdout.trim();
+}

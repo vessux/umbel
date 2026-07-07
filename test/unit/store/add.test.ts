@@ -118,8 +118,8 @@ describe("runAdd", () => {
   });
 
   it("rejects --bundle= with an empty value", async () => {
-    await expect(
-      runAdd(["github:acme/tools@v1", "greet", "--bundle="], env, root),
-    ).rejects.toThrow(/--bundle requires a value/);
+    await expect(runAdd(["github:acme/tools@v1", "greet", "--bundle="], env, root)).rejects.toThrow(
+      /--bundle requires a value/,
+    );
   });
 });

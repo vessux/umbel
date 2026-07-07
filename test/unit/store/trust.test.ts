@@ -72,7 +72,11 @@ describe("decideTrust", () => {
       ["hooks/a", "aa"], // unchanged
       ["hooks/b", "OLD"], // changed
     ]);
-    expect(decideTrust(before, after).map((a) => a.ref).sort()).toEqual(["hooks/b", "mcps/c"]);
+    expect(
+      decideTrust(before, after)
+        .map((a) => a.ref)
+        .sort(),
+    ).toEqual(["hooks/b", "mcps/c"]);
   });
 
   it("flags nothing when every artifact matches the baseline", () => {
