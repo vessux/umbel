@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { multiselect, select, text } from "@clack/prompts";
 import type { BundleEntry } from "../bundle/discover.ts";
 import { discoverBundles } from "../bundle/discover.ts";
+import { NAME_RE } from "../bundle/manifest.ts";
 import { findProjectRoot } from "../bundle/pin.ts";
 import { NotFoundError } from "../errors.ts";
 import { walkArtifactRoot } from "../source/walk.ts";
@@ -16,8 +17,6 @@ export interface InitAnswers {
   skills: string[];
   agents: string[];
 }
-
-const NAME_RE = /^[a-z][a-z0-9-]{1,40}$/;
 
 export function renderInitManifest(a: InitAnswers): string {
   const lines: string[] = ["---", `name: ${a.name}`];

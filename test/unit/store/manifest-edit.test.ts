@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
+import { loadManifest } from "../../../src/bundle/manifest.ts";
 import { UsageError } from "../../../src/errors.ts";
-import { addDepEdit } from "../../../src/store/manifest-edit.ts";
+import {
+  addDepEdit,
+  removeDepEdit,
+  removeRefEdit,
+  renameBundleEdit,
+} from "../../../src/store/manifest-edit.ts";
+import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 const RAW = `---
 # my dev bundle
@@ -68,5 +77,79 @@ describe("addDepEdit", () => {
     const out = addDepEdit("---\n\n---\n", "tools", "github:acme/tools@v1", "tools/greet");
     expect(out).toMatch(/deps:\n\s+tools: github:acme\/tools@v1/);
     expect(out).toMatch(/skills:\n\s+- tools\/greet/);
+  });
+});
+
+const SAMPLE = `---
+name: web
+# hand-written comment
+deps:
+  tdd: github:org/tdd@v1
+  local: link:./x
+skills:
+  - tdd/writing   # inline note
+  - local/mine
+  - tdd/reviewing
+agents:
+  - tdd/planner
+---
+
+Body prose stays.
+`;
+
+describe("removeDepEdit", () => {
+  it("drops the dep and all its refs, preserving comments and body", () => {
+    const out = removeDepEdit(SAMPLE, "tdd");
+    expect(out).toContain("# hand-written comment");
+    expect(out).toContain("Body prose stays.");
+    expect(out).not.toContain("tdd/writing");
+    expect(out).not.toContain("tdd/reviewing");
+    expect(out).not.toContain("tdd/planner");
+    expect(out).toContain("local/mine");
+    expect(out).toContain("local: link:./x");
+  });
+
+  it("deletes a list key that becomes empty and empties deps", () => {
+    const out = removeDepEdit(SAMPLE, "tdd");
+    expect(out).not.toMatch(/^agents:/m);
+    expect(out).toContain("deps:");
+    const onlyLocal = removeDepEdit(out, "local");
+    expect(onlyLocal).not.toMatch(/^deps:/m);
+    expect(onlyLocal).not.toMatch(/^skills:/m);
+  });
+});
+
+describe("removeRefEdit", () => {
+  it("removes one ref, leaves deps and sibling refs intact", () => {
+    const out = removeRefEdit(SAMPLE, "tdd/writing");
+    expect(out).not.toContain("tdd/writing");
+    expect(out).toContain("tdd/reviewing");
+    expect(out).toContain("tdd: github:org/tdd@v1");
+  });
+});
+
+describe("renameBundleEdit", () => {
+  it("rewrites the name field, preserving everything else", () => {
+    const out = renameBundleEdit(SAMPLE, "web-fork");
+    expect(out).toMatch(/^name: web-fork$/m);
+    expect(out).toContain("# hand-written comment");
+    expect(out).toContain("Body prose stays.");
+  });
+});
+
+describe("edit round-trips re-parse", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) cleanup(d);
+  });
+
+  it("removeDepEdit output loads as a valid manifest", () => {
+    const dir = makeTmpDir();
+    dirs.push(dir);
+    const p = join(dir, "web.md");
+    writeFileSync(p, removeDepEdit(SAMPLE, "tdd"));
+    const { manifest } = loadManifest(p);
+    expect(manifest.deps).toEqual({ local: "link:./x" });
+    expect(manifest.skills).toEqual(["local/mine"]);
   });
 });

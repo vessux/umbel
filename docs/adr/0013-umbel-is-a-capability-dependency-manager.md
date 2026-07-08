@@ -115,8 +115,11 @@ guarantee.
 `install`, `update`, `outdated`, `edit`, `fork`, `pack`) resolves its target **uniformly**:
 `--bundle`/positional wins; a single-candidate pin → that bundle; a multi-candidate pin →
 scoped picker on TTY, error on non-TTY; a vanilla or absent pin → error with a hint (offer
-`init` on TTY). When the target is a **user-scope** bundle, umbel prints a one-line heads-up
-that edits affect other projects, with a `fork` hint.
+`init` on TTY). When the target is a **user-scope** bundle *and the command runs from within a
+project* (a `.claude/` root exists), umbel prints a one-line heads-up that edits affect other
+projects, with a `fork` hint. The heads-up is gated on the project context because it answers
+story 33 — *editing a shared global bundle from a repo*; managing the global library directly
+(outside any project) is deliberate, so it stays quiet there.
 
 ### Acquisition and the store
 

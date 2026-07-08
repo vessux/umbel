@@ -64,7 +64,7 @@ export interface ManifestResult {
   warnings: string[];
 }
 
-const NAME_RE = /^[a-z][a-z0-9-]{1,40}$/;
+export const NAME_RE = /^[a-z][a-z0-9-]{1,40}$/;
 
 function parseFrontmatter(
   path: string,

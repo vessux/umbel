@@ -11,4 +11,10 @@ describe("helpText", () => {
   it("no longer advertises the removed skills verb", () => {
     expect(helpText()).not.toContain("umbel skills");
   });
+
+  it("documents the fork and remove verbs", () => {
+    const help = helpText();
+    expect(help).toContain("umbel remove");
+    expect(help).toContain("umbel fork");
+  });
 });

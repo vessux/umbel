@@ -35,7 +35,9 @@ import { renderShow } from "./bundle/show.ts";
 import { CliError } from "./errors.ts";
 import { installShim, uninstallShim } from "./shim/install.ts";
 import { runAdd } from "./store/add.ts";
+import { runFork } from "./store/fork.ts";
 import { runInstall } from "./store/install.ts";
+import { runRemove } from "./store/remove.ts";
 import { isInteractive } from "./tty.ts";
 import { runInitWizard } from "./ui/bundle-init.ts";
 import { VANILLA_PICK, pickBundle, pickScopedBundle } from "./ui/bundle-picker.ts";
@@ -94,6 +96,8 @@ async function runBundleVerb(
   if (verb === "run") return runBundleRun(rest, env, cwd);
   if (verb === "add") return runAdd(rest, env, cwd);
   if (verb === "install") return runInstall(rest, env, cwd);
+  if (verb === "remove") return runRemove(rest, env, cwd);
+  if (verb === "fork") return runFork(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
   return runBundleInit(env, cwd);

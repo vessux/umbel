@@ -1,4 +1,4 @@
-import { select } from "@clack/prompts";
+import { autocomplete } from "@clack/prompts";
 import type { BundleEntry } from "../bundle/discover.ts";
 import type { Candidate } from "../bundle/pin.ts";
 import { PICKER_MAX_VISIBLE, assertSelected } from "./prompt.ts";
@@ -33,7 +33,7 @@ export async function pickBundle(opts: PickBundleOpts): Promise<string | null> {
     : (valid.find((e) => e.name === opts.pinnedName)?.name ?? options[0]!.value);
 
   return assertSelected(
-    await select<string>({
+    await autocomplete<string>({
       message: opts.message ?? "Select bundle:",
       options,
       initialValue,
@@ -83,7 +83,7 @@ export async function pickScopedBundle(opts: {
 }): Promise<string> {
   const { options, initialValue } = scopedPickerOptions(opts.candidates, opts.entries);
   return assertSelected(
-    await select<string>({
+    await autocomplete<string>({
       message: opts.message ?? "Select bundle:",
       options,
       initialValue,

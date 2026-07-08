@@ -52,4 +52,13 @@ describe("parseSubcommand", () => {
     const sub = parseSubcommand(["add", "github:a/b@v1"]);
     expect(sub).toEqual({ kind: "verb", verb: "add", rest: ["github:a/b@v1"] });
   });
+
+  it("recognizes 'fork' and 'remove' as bundle verbs", () => {
+    expect(parseSubcommand(["fork", "x"])).toEqual({ kind: "verb", verb: "fork", rest: ["x"] });
+    expect(parseSubcommand(["remove", "a/b"])).toEqual({
+      kind: "verb",
+      verb: "remove",
+      rest: ["a/b"],
+    });
+  });
 });
