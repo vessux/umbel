@@ -713,6 +713,8 @@ umbel run    [<name>] [--no-cache] [-- ...args]   # exec claude
 umbel apply  [<name>] [--vanilla]                 # write pin + warm cache (--vanilla = pin "no bundle")
 umbel unpin                                       # remove pin
 umbel remove <alias> | <alias>/<leaf> [--bundle]  # drop a dependency or one artifact
+umbel update [<alias>] [--bundle] [--yes]         # move branch pins to newest + re-lock
+umbel outdated [--bundle]                         # read-only: branch deps with newer commits
 umbel fork   [<newname>] [--bundle <src>]         # project-scope divergent copy
 umbel list                                        # table
 umbel show   [<name>]                             # resolved view
@@ -772,6 +774,27 @@ is a not-found error (exit 3). When the bundle has an `extends`, the error adds 
 "if it's inherited via `extends`, `umbel fork` to diverge" hint — a heuristic
 prompt, not a precise inheritance check (true detection would require resolving
 the parent chain). Removal never introduces executable content, so no trust gate.
+
+### `umbel update` / `umbel outdated`
+
+Version movement. **Version follows the coordinate's ref** (version-follows-
+transport, ADR-0013): a **branch** ref _tracks_, a **tag or commit** ref _pins_.
+The classifier is a lightweight `git ls-remote --heads <url> <ref>` — an exact
+`refs/heads/<ref>` match means "branch" (and gives its tip); anything else (tag,
+commit id, absent) is a pin.
+
+- `umbel update [<alias>]` is the **only verb that moves pins**. For each branch-
+  tracked dep (all of them, or just `<alias>`), it re-resolves the ref to its
+  newest commit, stakes exactly that commit, runs the **trust gate** (ADR-0014)
+  on any new/changed executable content, and rewrites only the moved lock entries
+  — other pins, `link:`/`local` deps, and unrelated entries stay verbatim. A
+  tag/commit-pinned or `link:` dep is a no-op. `--yes` overrides the trust gate;
+  a non-TTY run with new/changed executable content fails closed (exit 5) and
+  writes nothing. A named alias that isn't a dependency is exit 3.
+- `umbel outdated` is **read-only**: for each branch-tracked dep it compares the
+  ref's current tip to the lock and lists those with a newer commit (`<alias>
+  <coordinate> <old12> → <new12>`). It stakes no checkout and never writes the
+  lock; tag/commit pins and `link:` deps are omitted.
 
 ### `umbel fork`
 

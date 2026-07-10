@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NotFoundError } from "../../../src/errors.ts";
 import { parseCoordinate } from "../../../src/store/coordinate.ts";
-import { checkoutPath, ensureCheckout } from "../../../src/store/store.ts";
+import { checkoutPath, ensureCheckout, resolveBranchTip } from "../../../src/store/store.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
@@ -112,5 +112,54 @@ describe("ensureCheckout", () => {
     expect(() =>
       ensureCheckout({ coord: coord(), url: `file://${join(root, "missing")}`, storeRoot }),
     ).toThrowError(NotFoundError);
+  });
+});
+
+describe("resolveBranchTip", () => {
+  let root: string;
+  let repoDir: string;
+  let commit: string;
+
+  beforeEach(() => {
+    root = makeTmpDir();
+    repoDir = join(root, "fixtures", "acme", "tools");
+    // makeGitFixture creates branch `main` with a lightweight tag `v1` on the commit.
+    commit = makeGitFixture(repoDir, { "a.txt": "a\n" });
+  });
+  afterEach(() => cleanup(root));
+
+  const tip = (ref: string) =>
+    resolveBranchTip({
+      url: `file://${repoDir}`,
+      ref,
+      coord: parseCoordinate(`github:acme/tools@${ref}`),
+    });
+
+  it("returns the tip commit for a branch ref", () => {
+    expect(tip("main")).toBe(commit);
+  });
+
+  it("returns null for a tag ref (a pin, not a branch)", () => {
+    expect(tip("v1")).toBeNull();
+  });
+
+  it("returns null for a commit-sha ref (a pin, not a branch)", () => {
+    expect(tip(commit)).toBeNull();
+  });
+
+  it("returns null for a nonexistent ref", () => {
+    expect(tip("nope")).toBeNull();
+  });
+
+  it("matches the exact branch, not a suffix (main ≠ feature/main)", () => {
+    execFileSync("git", ["-C", repoDir, "checkout", "-q", "-b", "feature/main"]);
+    writeFileSync(join(repoDir, "a.txt"), "b\n");
+    execFileSync("git", ["-C", repoDir, "commit", "-qam", "c2"]);
+    const featureTip = execFileSync("git", ["-C", repoDir, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    expect(featureTip).not.toBe(commit);
+    // `main` must resolve to main's tip, never feature/main's.
+    expect(tip("main")).toBe(commit);
   });
 });
