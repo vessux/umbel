@@ -6,9 +6,11 @@ import { loadManifest } from "../../../src/bundle/manifest.ts";
 import { UsageError } from "../../../src/errors.ts";
 import {
   addDepEdit,
+  addRefEdit,
   removeDepEdit,
   removeRefEdit,
   renameBundleEdit,
+  setDepEdit,
 } from "../../../src/store/manifest-edit.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
@@ -125,6 +127,47 @@ describe("removeRefEdit", () => {
     expect(out).not.toContain("tdd/writing");
     expect(out).toContain("tdd/reviewing");
     expect(out).toContain("tdd: github:org/tdd@v1");
+  });
+});
+
+describe("setDepEdit", () => {
+  it("sets deps.<alias> without appending any ref, preserving comments", () => {
+    const raw = "---\nname: demo\n# keep me\ndeps:\n  a: github:x/a@v1\n---\nbody\n";
+    const out = setDepEdit(raw, "b", "github:x/b@v2");
+    expect(out).toContain("# keep me");
+    expect(out).toContain("a: github:x/a@v1");
+    expect(out).toContain("b: github:x/b@v2");
+    expect(out).toContain("body");
+    expect(out).not.toMatch(/skills:/);
+  });
+
+  it("creates the deps map when absent", () => {
+    const out = setDepEdit("---\nname: demo\n---\n", "a", "github:x/a@v1");
+    expect(out).toMatch(/deps:\n\s+a: github:x\/a@v1/);
+  });
+});
+
+describe("addRefEdit", () => {
+  it("appends a ref to an existing kind list", () => {
+    const out = addRefEdit("---\nname: d\nskills: [a/x]\n---\n", "skills", "b/y");
+    expect(out).toMatch(/a\/x/);
+    expect(out).toMatch(/b\/y/);
+  });
+
+  it("creates the list when the kind is absent", () => {
+    const out = addRefEdit("---\nname: d\n---\n", "agents", "a/x");
+    expect(out).toMatch(/agents:\n\s+- a\/x/);
+  });
+
+  it("is idempotent — does not duplicate an existing ref", () => {
+    const out = addRefEdit("---\nname: d\nskills: [a/x]\n---\n", "skills", "a/x");
+    expect(out.match(/a\/x/g)?.length).toBe(1);
+  });
+
+  it("rejects a kind whose value is not a list", () => {
+    expect(() => addRefEdit("---\nname: d\nskills: nope\n---\n", "skills", "a/x")).toThrowError(
+      UsageError,
+    );
   });
 });
 
