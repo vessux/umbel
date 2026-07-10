@@ -1,14 +1,16 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { BundleManifest } from "../../../src/bundle/manifest.ts";
 import { loadManifest } from "../../../src/bundle/manifest.ts";
+import { lockPathFor } from "../../../src/store/lock.ts";
 import {
   type Draft,
   draftFromManifest,
   lockFromDraft,
   manifestEditsForDraft,
   renderManifest,
+  writeDraft,
 } from "../../../src/ui/authoring.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
@@ -192,5 +194,43 @@ describe("manifestEditsForDraft", () => {
     } as unknown as BundleManifest;
     const out = manifestEditsForDraft(raw, original, draft({}));
     expect(out).not.toMatch(/tools/);
+  });
+});
+
+describe("writeDraft", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = makeTmpDir();
+  });
+  afterEach(() => {
+    cleanup(dir);
+  });
+
+  it("create: writes manifest + lock for a github dep", () => {
+    const outDir = join(dir, "bundles");
+    mkdirSync(outDir, { recursive: true });
+    const d = draft({
+      deps: [
+        {
+          alias: "tools",
+          coordinate: "github:acme/tools@v1",
+          commit: "a".repeat(40),
+          contentHash: "b".repeat(64),
+          dir: "/x",
+          availableSkills: ["g"],
+          selectedSkills: ["g"],
+        },
+      ],
+    });
+    const path = join(outDir, "demo.md");
+    writeDraft(d, { mode: "create", path });
+    expect(readFileSync(path, "utf8")).toMatch(/tools\/g/);
+    expect(existsSync(lockPathFor(path))).toBe(true);
+  });
+
+  it("create: writes no lock when there are no deps", () => {
+    const path = join(dir, "demo.md");
+    writeDraft(draft({ poolSkills: ["local/x"] }), { mode: "create", path });
+    expect(existsSync(lockPathFor(path))).toBe(false);
   });
 });

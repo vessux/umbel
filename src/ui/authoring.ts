@@ -1,6 +1,8 @@
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { stringify } from "yaml";
 import type { BundleManifest } from "../bundle/manifest.ts";
-import type { LockFile } from "../store/lock.ts";
+import { type LockFile, lockPathFor, writeLock } from "../store/lock.ts";
 import {
   addRefEdit,
   removeDepEdit,
@@ -151,4 +153,19 @@ export function renderManifest(d: Draft): string {
     "# settings: {}",
   ].join("\n");
   return `---\n${yaml}${comments}\n---\n\n`;
+}
+
+export type WriteMode =
+  | { mode: "create"; path: string }
+  | { mode: "edit"; path: string; raw: string; original: BundleManifest };
+
+export function writeDraft(d: Draft, w: WriteMode): void {
+  const content =
+    w.mode === "create" ? renderManifest(d) : manifestEditsForDraft(w.raw, w.original, d);
+  mkdirSync(dirname(w.path), { recursive: true });
+  writeFileSync(w.path, content);
+  const lock = lockFromDraft(d);
+  const lockPath = lockPathFor(w.path);
+  if (Object.keys(lock.deps).length > 0) writeLock(lockPath, lock);
+  else if (existsSync(lockPath)) rmSync(lockPath);
 }
