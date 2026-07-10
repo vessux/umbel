@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { BundleManifest } from "../../../src/bundle/manifest.ts";
 import { loadManifest } from "../../../src/bundle/manifest.ts";
-import { type Draft, draftFromManifest, renderManifest } from "../../../src/ui/authoring.ts";
+import {
+  type Draft,
+  draftFromManifest,
+  lockFromDraft,
+  renderManifest,
+} from "../../../src/ui/authoring.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 function draft(over: Partial<Draft>): Draft {
@@ -115,5 +120,34 @@ describe("draftFromManifest", () => {
     expect(d.inheritedSkills).toEqual(["base/tdd"]);
     expect(d.extendsList).toEqual(["base"]);
     expect(d.scope).toBe("project");
+  });
+});
+
+describe("lockFromDraft", () => {
+  it("pins every github dep by commit + contentHash", () => {
+    const d = draft({
+      deps: [
+        {
+          alias: "tools",
+          coordinate: "github:acme/tools@v1",
+          commit: "a".repeat(40),
+          contentHash: "b".repeat(64),
+          dir: "/x",
+          availableSkills: ["g"],
+          selectedSkills: ["g"],
+        },
+      ],
+    });
+    const lock = lockFromDraft(d);
+    expect(lock.version).toBe(1);
+    expect(lock.deps.tools).toEqual({
+      coordinate: "github:acme/tools@v1",
+      commit: "a".repeat(40),
+      contentHash: "b".repeat(64),
+    });
+  });
+
+  it("yields an empty deps map when there are no deps", () => {
+    expect(lockFromDraft(draft({})).deps).toEqual({});
   });
 });

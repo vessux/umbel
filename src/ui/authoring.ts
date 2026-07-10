@@ -1,5 +1,6 @@
 import { stringify } from "yaml";
 import type { BundleManifest } from "../bundle/manifest.ts";
+import type { LockFile } from "../store/lock.ts";
 
 export interface DepDraft {
   alias: string;
@@ -79,6 +80,18 @@ export function draftFromManifest(
     inheritedSkills: [...inherited.skills],
     inheritedAgents: [...inherited.agents],
   };
+}
+
+export function lockFromDraft(d: Draft): LockFile {
+  const deps: LockFile["deps"] = {};
+  for (const dep of d.deps) {
+    deps[dep.alias] = {
+      coordinate: dep.coordinate,
+      commit: dep.commit,
+      contentHash: dep.contentHash,
+    };
+  }
+  return { version: 1, deps };
 }
 
 export function renderManifest(d: Draft): string {
