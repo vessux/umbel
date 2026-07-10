@@ -113,7 +113,8 @@ export async function runInitWizard(ctx: InitContext): Promise<number> {
   const outPath = join(outDir, `${name}.md`);
   writeDraft(finalDraft, { mode: "create", path: outPath });
   process.stdout.write(`wrote ${outPath}\n`);
-  if (finalDraft.deps.length > 0) process.stdout.write(`lock: ${outPath.replace(/\.md$/, ".lock")}\n`);
+  if (finalDraft.deps.length > 0)
+    process.stdout.write(`lock: ${outPath.replace(/\.md$/, ".lock")}\n`);
   return 0;
 }
 

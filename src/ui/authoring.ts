@@ -3,12 +3,7 @@ import { dirname } from "node:path";
 import { stringify } from "yaml";
 import type { BundleManifest } from "../bundle/manifest.ts";
 import { type LockFile, lockPathFor, writeLock } from "../store/lock.ts";
-import {
-  addRefEdit,
-  removeDepEdit,
-  removeRefEdit,
-  setDepEdit,
-} from "../store/manifest-edit.ts";
+import { addRefEdit, removeDepEdit, removeRefEdit, setDepEdit } from "../store/manifest-edit.ts";
 
 export interface DepDraft {
   alias: string;

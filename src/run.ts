@@ -104,11 +104,7 @@ async function runBundleVerb(
   return runBundleInit(env, cwd);
 }
 
-function runBundleEdit(
-  rest: string[],
-  env: NodeJS.ProcessEnv,
-  cwd: string,
-): Promise<number> {
+function runBundleEdit(rest: string[], env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
   if (!isInteractive(env)) {
     process.stderr.write("umbel edit: requires a TTY\n");
     return Promise.resolve(2);

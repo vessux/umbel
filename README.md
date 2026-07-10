@@ -182,7 +182,8 @@ umbel add <coord> [leaf] [--bundle <name>] [--yes]  # fetch a dependency (github
 umbel install [--frozen] [--allow-missing] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path)
 umbel remove <alias> | <alias>/<leaf> [--bundle <name>]  # drop a dependency (+ its refs & lock) or one composed artifact
 umbel fork [newname] [--bundle <src>]   # copy a bundle into the current project to diverge (project scope; same-name shadow by default)
-umbel init                              # multi-step authoring wizard
+umbel init                              # interleaved authoring wizard (deps + Review; writes manifest + lock)
+umbel edit [name] [--bundle <src>]      # reopen a bundle on the Review view (add / re-pick / remove)
 umbel gc                                # prune cache (keep newest 3 per name)
 umbel shim install [--force]            # install ~/.local/share/umbel/bin/claude (the PATH shim)
 umbel shim uninstall                    # remove the shim
