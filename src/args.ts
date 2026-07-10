@@ -52,6 +52,7 @@ export const BUNDLE_VERBS = new Set([
   "list",
   "show",
   "init",
+  "edit",
   "build",
   "gc",
   "shim",

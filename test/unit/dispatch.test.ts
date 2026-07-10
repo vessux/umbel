@@ -30,6 +30,11 @@ describe("parseSubcommand", () => {
       rest: ["data-science", "--", "--version"],
     });
     expect(parseSubcommand(["init"])).toEqual({ kind: "verb", verb: "init", rest: [] });
+    expect(parseSubcommand(["edit", "demo"])).toEqual({
+      kind: "verb",
+      verb: "edit",
+      rest: ["demo"],
+    });
   });
 
   it("returns error for unknown commands", () => {

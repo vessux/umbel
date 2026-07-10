@@ -52,6 +52,27 @@ export function addDepEdit(raw: string, alias: string, coordinate: string, ref: 
   });
 }
 
+/** Set deps.<alias> = coordinate only; never touches composition lists. */
+export function setDepEdit(raw: string, alias: string, coordinate: string): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    doc.setIn(["deps", alias], coordinate);
+  });
+}
+
+/** Append one ref to a kind list (create if absent, skip if present). */
+export function addRefEdit(raw: string, kind: (typeof REF_LISTS)[number], ref: string): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    const current = (doc.toJS() as Record<string, unknown>)[kind];
+    if (current === undefined) {
+      doc.set(kind, [ref]);
+    } else if (Array.isArray(current)) {
+      if (!current.includes(ref)) doc.addIn([kind], ref);
+    } else {
+      throw new UsageError(`bundle manifest '${kind}' is not a list; cannot edit`);
+    }
+  });
+}
+
 /**
  * Drop `deps.<alias>` and every `<alias>/<leaf>` composition ref across all ref
  * lists; delete list keys (and the deps map) that become empty.
@@ -70,6 +91,21 @@ export function removeDepEdit(raw: string, alias: string): string {
 export function removeRefEdit(raw: string, ref: string): string {
   return withFrontmatterDoc(raw, (doc) => {
     for (const list of REF_LISTS) removeFromList(doc, list, (s) => s === ref);
+  });
+}
+
+/**
+ * Remove one exact ref from a SINGLE kind list. Unlike removeRefEdit, this does
+ * not touch the other lists — so dropping skill `a/x` leaves a same-named hook
+ * `a/x` intact.
+ */
+export function removeRefFromKindEdit(
+  raw: string,
+  kind: (typeof REF_LISTS)[number],
+  ref: string,
+): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    removeFromList(doc, kind, (s) => s === ref);
   });
 }
 

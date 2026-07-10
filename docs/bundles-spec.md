@@ -530,9 +530,11 @@ Opt-out for a single invocation: call claude by absolute path
 (`/usr/local/bin/claude ...`), or run with `UMBEL_RESOLVED=1` prefixed
 to the command.
 
-### `init` wizard
+### `init` / `edit` wizard
 
-Sequential prompts:
+`init` is an **interleaved authoring wizard** (ADR-0015). It opens with a few
+scaffold prompts, then lands on a unified **Review** screen where the
+dependency loop lives:
 
 1. **Name** — text input, validated against the regex.
 2. **Description** — text input, optional.
@@ -540,13 +542,33 @@ Sequential prompts:
    `<project>/.claude/bundles/` (project, only offered when CWD is inside a
    project).
 4. **Extends** — multi-select of existing bundles (user + project).
-5. **Skills** — multi-select from `~/.config/umbel/skills/`. Items inherited from any
-   selected parent appear pre-checked, **locked**, and tagged `[inherited]`.
-   User picks only additional skills.
-6. **Agents** — same as skills.
+5. **Pool skills / agents** — multi-select from `~/.config/umbel/skills/` and
+   `.../agents/`. Items inherited from any selected parent appear pre-checked,
+   **locked**, and tagged `[inherited]`; the user picks only additional
+   artifacts.
+6. **Review** — the unified view. Actions: **add a dependency** (paste a
+   `github:<org>/<repo>@<tag>` coordinate → fetch → trust-gate → name the alias
+   → pick that dep's skills, **freshly-added deps default all-checked**),
+   **re-pick skills / agents** (inherited rows stay locked), **remove a
+   dependency**, **write**, or **cancel**.
 
-Wizard does not author `mcps` / `hooks` / `settings`. User edits the
-generated `bundle.md` to add those.
+**The write is transactional.** Adding a dependency fetches it into the store
+immediately (harmless — it's just data) and runs the trust gate then and there,
+but `bundle.md` + its sibling lock are written **only** at the Review's "write"
+step. Aborting the wizard leaves no manifest, just some warm store.
+
+`umbel edit [<name>] [--bundle <src>]` reopens an existing bundle **directly on
+the Review view** (add / re-pick / remove), resolving the target by the uniform
+current-bundle rule (positional / `--bundle` / pin / picker). It re-fetches the
+bundle's github deps at their locked commits so Review can offer their current
+skills, and writes back with comment-preserving edits + a reconciled lock.
+
+Both verbs require a TTY (non-TTY → exit 2). The wizard still does not author
+`mcps` / `hooks` / `settings` — hand-edit the generated `bundle.md` for those.
+
+Wizard scope (tracer limits): the dependency loop takes **github** coordinates
+only (`link:`/`local` deps are hand-edited into `deps:` for now); store-backed
+deps compose **skills** only.
 
 ## Introspection
 
@@ -694,7 +716,8 @@ umbel remove <alias> | <alias>/<leaf> [--bundle]  # drop a dependency or one art
 umbel fork   [<newname>] [--bundle <src>]         # project-scope divergent copy
 umbel list                                        # table
 umbel show   [<name>]                             # resolved view
-umbel init                                        # wizard
+umbel init                                        # interleaved authoring wizard
+umbel edit   [<name>] [--bundle <src>]            # reopen a bundle on the Review view
 umbel build  [<name>] [--no-cache]                # warm cache
 umbel gc                                          # prune cache
 umbel shim   install [--force] | uninstall | path # PATH-shim for `claude`
