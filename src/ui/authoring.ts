@@ -1,6 +1,12 @@
 import { stringify } from "yaml";
 import type { BundleManifest } from "../bundle/manifest.ts";
 import type { LockFile } from "../store/lock.ts";
+import {
+  addRefEdit,
+  removeDepEdit,
+  removeRefEdit,
+  setDepEdit,
+} from "../store/manifest-edit.ts";
 
 export interface DepDraft {
   alias: string;
@@ -80,6 +86,36 @@ export function draftFromManifest(
     inheritedSkills: [...inherited.skills],
     inheritedAgents: [...inherited.agents],
   };
+}
+
+export function manifestEditsForDraft(raw: string, original: BundleManifest, d: Draft): string {
+  let out = raw;
+  const origAliases = new Set(Object.keys(original.deps ?? {}));
+  const draftAliases = new Set(d.deps.map((x) => x.alias));
+
+  // 1. Remove deps no longer present (drops their refs + lock entry semantics).
+  for (const alias of origAliases) {
+    if (!draftAliases.has(alias)) out = removeDepEdit(out, alias);
+  }
+  // 2. Upsert remaining/added dep coordinates.
+  for (const dep of d.deps) out = setDepEdit(out, dep.alias, dep.coordinate);
+
+  // 3. Reconcile each ref list to the desired set.
+  const desired: Record<"skills" | "agents", string[]> = {
+    skills: skillRefs(d),
+    agents: agentRefs(d),
+  };
+  const orig: Record<"skills" | "agents", string[]> = {
+    skills: [...(original.skills ?? [])],
+    agents: [...(original.agents ?? [])],
+  };
+  for (const kind of ["skills", "agents"] as const) {
+    const want = new Set(desired[kind]);
+    const have = new Set(orig[kind]);
+    for (const ref of orig[kind]) if (!want.has(ref)) out = removeRefEdit(out, ref);
+    for (const ref of desired[kind]) if (!have.has(ref)) out = addRefEdit(out, kind, ref);
+  }
+  return out;
 }
 
 export function lockFromDraft(d: Draft): LockFile {

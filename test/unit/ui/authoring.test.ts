@@ -7,6 +7,7 @@ import {
   type Draft,
   draftFromManifest,
   lockFromDraft,
+  manifestEditsForDraft,
   renderManifest,
 } from "../../../src/ui/authoring.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
@@ -149,5 +150,47 @@ describe("lockFromDraft", () => {
 
   it("yields an empty deps map when there are no deps", () => {
     expect(lockFromDraft(draft({})).deps).toEqual({});
+  });
+});
+
+describe("manifestEditsForDraft", () => {
+  it("adds a new dep + its refs and drops a removed pool ref, preserving comments", () => {
+    const raw = "---\nname: b\n# hand comment\nskills: [local/review, local/old]\n---\nprose\n";
+    const original = {
+      name: "b",
+      skills: ["local/review", "local/old"],
+    } as unknown as BundleManifest;
+    const d = draft({
+      poolSkills: ["local/review"],
+      deps: [
+        {
+          alias: "tools",
+          coordinate: "github:acme/tools@v1",
+          commit: "a".repeat(40),
+          contentHash: "b".repeat(64),
+          dir: "/x",
+          availableSkills: ["greet"],
+          selectedSkills: ["greet"],
+        },
+      ],
+    });
+    const out = manifestEditsForDraft(raw, original, d);
+    expect(out).toContain("# hand comment");
+    expect(out).toContain("prose");
+    expect(out).toMatch(/tools: github:acme\/tools@v1/);
+    expect(out).toMatch(/tools\/greet/);
+    expect(out).toMatch(/local\/review/);
+    expect(out).not.toMatch(/local\/old/);
+  });
+
+  it("removes a dependency that is gone from the Draft", () => {
+    const raw = "---\nname: b\ndeps:\n  tools: github:acme/tools@v1\nskills: [tools/greet]\n---\n";
+    const original = {
+      name: "b",
+      deps: { tools: "github:acme/tools@v1" },
+      skills: ["tools/greet"],
+    } as unknown as BundleManifest;
+    const out = manifestEditsForDraft(raw, original, draft({}));
+    expect(out).not.toMatch(/tools/);
   });
 });
