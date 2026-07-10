@@ -66,4 +66,13 @@ describe("parseSubcommand", () => {
       rest: ["a/b"],
     });
   });
+
+  it("recognizes 'update' and 'outdated' as bundle verbs", () => {
+    expect(parseSubcommand(["update", "tools", "--bundle", "dev"])).toEqual({
+      kind: "verb",
+      verb: "update",
+      rest: ["tools", "--bundle", "dev"],
+    });
+    expect(parseSubcommand(["outdated"])).toEqual({ kind: "verb", verb: "outdated", rest: [] });
+  });
 });

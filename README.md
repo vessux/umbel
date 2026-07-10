@@ -180,6 +180,8 @@ umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
 umbel add <coord> [leaf] [--bundle <name>] [--yes]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
 umbel install [--frozen] [--allow-missing] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path)
+umbel update [alias] [--bundle <name>] [--yes]  # move branch-tracked pins to their newest commit + re-lock (tag/commit pins are no-ops)
+umbel outdated [--bundle <name>]        # list branch deps with a newer commit available (read-only)
 umbel remove <alias> | <alias>/<leaf> [--bundle <name>]  # drop a dependency (+ its refs & lock) or one composed artifact
 umbel fork [newname] [--bundle <src>]   # copy a bundle into the current project to diverge (project scope; same-name shadow by default)
 umbel init                              # interleaved authoring wizard (deps + Review; writes manifest + lock)
@@ -197,6 +199,14 @@ reconciles a hand-edited `deps:` into the lock (resolving new/changed
 dependencies, keeping existing pins, dropping removed ones) without ever
 bumping a pin — that is `umbel update`'s job. `run` / `apply` / `build`
 auto-materialize any missing store checkouts before compiling.
+
+Version follows the coordinate's ref: a **branch** ref _tracks_ (its lock entry
+moves), a **tag or commit** ref _pins_ (fixed). `umbel update [alias]` is the
+only verb that moves pins — it re-resolves each branch-tracked dep to its newest
+commit, runs the trust gate on any new/changed executable content, and rewrites
+the lock; tag/commit-pinned and `link:` deps are left untouched. `umbel outdated`
+reports read-only which branch deps have a newer commit available and changes
+nothing.
 
 Not every dependency is a fetched git pin. A `link:<path>` coordinate points at
 a **local directory** (unlocked, live), and the built-in `local` dependency

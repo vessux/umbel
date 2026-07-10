@@ -26,6 +26,29 @@ export function checkoutPath(storeRoot: string, coord: Coordinate, commit: strin
   return join(storeRoot, "github", coord.org, coord.repo, commit);
 }
 
+/**
+ * The commit a branch ref currently points at, or `null` when `ref` is not a
+ * branch (a tag or commit id → a *pin*, which `update`/`outdated` leave alone —
+ * version-follows-transport, ADR-0013). Uses a lightweight `ls-remote` query, so
+ * no checkout is cloned or staked and `outdated` can stay read-only.
+ */
+export function resolveBranchTip(opts: {
+  url: string;
+  ref: string;
+  coord: Coordinate;
+}): string | null {
+  const out = git(["ls-remote", "--heads", opts.url, opts.ref], opts.coord);
+  const want = `refs/heads/${opts.ref}`;
+  for (const line of out.split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab === -1) continue;
+    // ls-remote's ref pattern is a tail match, so require the exact refname to
+    // avoid a branch like `feature/main` answering for `main`.
+    if (line.slice(tab + 1).trim() === want) return line.slice(0, tab).trim();
+  }
+  return null;
+}
+
 export function ensureCheckout(opts: EnsureOpts): Checkout {
   // link:/local deps are live (never fetched or staked); only github reaches here.
   const { coord } = opts;
