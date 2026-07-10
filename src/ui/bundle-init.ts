@@ -1,17 +1,23 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { multiselect, select, text } from "@clack/prompts";
 import type { BundleEntry } from "../bundle/discover.ts";
 import { discoverBundles } from "../bundle/discover.ts";
-import { storeRootDir } from "../bundle/env.ts";
+import { artifactRoots, storeRootDir } from "../bundle/env.ts";
+import { loadBundleIndex } from "../bundle/exec.ts";
 import { NAME_RE } from "../bundle/manifest.ts";
 import { findProjectRoot } from "../bundle/pin.ts";
 import { CancelledError, NotFoundError, UsageError } from "../errors.ts";
 import { walkArtifactRoot } from "../source/walk.ts";
 import { listSkillLeaves } from "../store/artifacts.ts";
 import { ALIAS_RE, deriveAlias, githubUrl, parseCoordinate } from "../store/coordinate.ts";
+import { lockPathFor, readLock } from "../store/lock.ts";
 import { ensureCheckout } from "../store/store.ts";
+import { resolveTarget, resolveTargetOrPick } from "../store/target.ts";
 import { gateTrust, planTrust } from "../store/trust.ts";
-import { type DepDraft, type Draft, writeDraft } from "./authoring.ts";
+import { isInteractive } from "../tty.ts";
+import { type DepDraft, type Draft, draftFromManifest, writeDraft } from "./authoring.ts";
 import { type GroupedOption, bucketByQualifiedName, pickGrouped } from "./picker.ts";
 import { PICKER_MAX_VISIBLE, assertSelected, confirmExecTrust } from "./prompt.ts";
 
@@ -109,6 +115,90 @@ export async function runInitWizard(ctx: InitContext): Promise<number> {
   process.stdout.write(`wrote ${outPath}\n`);
   if (finalDraft.deps.length > 0) process.stdout.write(`lock: ${outPath.replace(/\.md$/, ".lock")}\n`);
   return 0;
+}
+
+/**
+ * `umbel edit [<name>] [--bundle <src>]` — resolve the target via the uniform
+ * rule (positional/`--bundle`/pin/picker), re-fetch its github deps so the
+ * Review can offer their current skills, then land directly on the Review and
+ * write comment-preserving edits + a reconciled lock. Assumes a TTY (the
+ * dispatcher guards non-TTY).
+ */
+export async function runEditWizard(
+  rest: string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Promise<number> {
+  const { bundleFlag } = parseEditArgs(rest);
+  const index = loadBundleIndex(env, cwd);
+  const res = resolveTarget(index, bundleFlag, cwd, homedir());
+  const entry = await resolveTargetOrPick(res, {
+    index,
+    env,
+    verb: "edit",
+    interactive: isInteractive(env),
+    inProject: findProjectRoot(cwd, homedir()) !== null,
+  });
+  const manifest = entry.manifest!;
+  const raw = readFileSync(entry.path, "utf8");
+
+  const validParents = index.entries.filter((e) => !e.malformed);
+  const inherited = collectInherited(manifest.extends ?? [], validParents);
+  const draft = draftFromManifest(entry.name, manifest, entry.scope, {
+    skills: [...inherited.skills],
+    agents: [...inherited.agents],
+  });
+
+  // Re-fetch each github dep at its locked commit to populate availableSkills
+  // (so Review can offer leaves not currently composed). Already-trusted locked
+  // content materializes silently; link/local deps carry no lock and are skipped.
+  const lock = readLock(lockPathFor(entry.path));
+  for (const dep of draft.deps) {
+    const coord = parseCoordinate(dep.coordinate);
+    if (coord.transport !== "github") continue;
+    const lockedCommit = lock?.deps[dep.alias]?.commit;
+    const checkout = ensureCheckout({
+      coord,
+      url: githubUrl(coord, env),
+      storeRoot: storeRootDir(env),
+      ...(lockedCommit !== undefined ? { lockedCommit } : {}),
+    });
+    dep.commit = checkout.commit;
+    dep.contentHash = checkout.contentHash;
+    dep.dir = checkout.dir;
+    dep.availableSkills = [...listSkillLeaves(checkout.dir).keys()].sort();
+  }
+
+  const finalDraft = await runReview(draft, { env, artifactRoots: artifactRoots(env) });
+  writeDraft(finalDraft, { mode: "edit", path: entry.path, raw, original: manifest });
+  process.stdout.write(`updated ${entry.path}\n`);
+  return 0;
+}
+
+function parseEditArgs(rest: string[]): { bundleFlag?: string } {
+  const positionals: string[] = [];
+  let bundleFlag: string | undefined;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    if (a === "--bundle") {
+      const v = rest[i + 1];
+      if (v === undefined || v.startsWith("-")) throw new UsageError("--bundle requires a value");
+      bundleFlag = v;
+      i++;
+    } else if (a.startsWith("--bundle=")) {
+      const v = a.slice("--bundle=".length);
+      if (v.length === 0) throw new UsageError("--bundle requires a value");
+      bundleFlag = v;
+    } else if (a.startsWith("-")) {
+      throw new UsageError(`umbel edit: unknown flag: ${a}`);
+    } else {
+      positionals.push(a);
+    }
+  }
+  const [name, extra] = positionals;
+  if (extra !== undefined) throw new UsageError(`umbel edit: unexpected argument: ${extra}`);
+  const target = bundleFlag ?? name;
+  return target !== undefined ? { bundleFlag: target } : {};
 }
 
 function bundleChoices(entries: BundleEntry[]) {

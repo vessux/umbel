@@ -39,7 +39,7 @@ import { runFork } from "./store/fork.ts";
 import { runInstall } from "./store/install.ts";
 import { runRemove } from "./store/remove.ts";
 import { isInteractive } from "./tty.ts";
-import { runInitWizard } from "./ui/bundle-init.ts";
+import { runEditWizard, runInitWizard } from "./ui/bundle-init.ts";
 import { VANILLA_PICK, pickBundle, pickScopedBundle } from "./ui/bundle-picker.ts";
 
 function readVersion(): string {
@@ -100,7 +100,20 @@ async function runBundleVerb(
   if (verb === "fork") return runFork(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
+  if (verb === "edit") return runBundleEdit(rest, env, cwd);
   return runBundleInit(env, cwd);
+}
+
+function runBundleEdit(
+  rest: string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Promise<number> {
+  if (!isInteractive(env)) {
+    process.stderr.write("umbel edit: requires a TTY\n");
+    return Promise.resolve(2);
+  }
+  return runEditWizard(rest, env, cwd);
 }
 
 function runShim(rest: string[], env: NodeJS.ProcessEnv): number {

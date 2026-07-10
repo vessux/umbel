@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,7 @@ import type { Draft } from "../../../src/ui/authoring.ts";
 import {
   addDependencyInteractive,
   listAvailableArtifacts,
+  runEditWizard,
   runInitWizard,
   runReview,
 } from "../../../src/ui/bundle-init.ts";
@@ -82,6 +83,45 @@ describe("runInitWizard", () => {
       }),
     ).rejects.toBeTruthy();
     expect(existsSync(join(userDir, "demo.md"))).toBe(false);
+    cleanup(root);
+  });
+});
+
+describe("runEditWizard", () => {
+  it("lands on Review and writes comment-preserving edits + lock", async () => {
+    const root = makeTmpDir();
+    const gh = join(root, "gh", "acme", "tools");
+    makeGitFixture(
+      gh,
+      {
+        "skills/greet/SKILL.md": "---\nname: greet\n---\n",
+        "skills/wave/SKILL.md": "---\nname: wave\n---\n",
+      },
+      "v1",
+    );
+    const userDir = join(root, "config", "bundles");
+    mkdirSync(userDir, { recursive: true });
+    writeFileSync(
+      join(userDir, "demo.md"),
+      "---\nname: demo\n# keep this\ndeps:\n  tools: github:acme/tools@v1\nskills: [tools/greet]\n---\nprose\n",
+    );
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_ARTIFACTS_DIR: join(root, "config"),
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+
+    vi.mocked(clack.select).mockResolvedValueOnce("skills"); // Review: re-pick
+    vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["tools/greet", "tools/wave"]);
+    vi.mocked(clack.select).mockResolvedValueOnce("write");
+
+    const rc = await runEditWizard(["demo"], env, root);
+    expect(rc).toBe(0);
+    const out = readFileSync(join(userDir, "demo.md"), "utf8");
+    expect(out).toContain("# keep this");
+    expect(out).toContain("prose");
+    expect(out).toMatch(/tools\/wave/);
+    expect(existsSync(join(userDir, "demo.lock"))).toBe(true);
     cleanup(root);
   });
 });
