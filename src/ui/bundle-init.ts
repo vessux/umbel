@@ -150,20 +150,50 @@ export async function runEditWizard(
     agents: [...inherited.agents],
   });
 
-  // Re-fetch each github dep at its locked commit to populate availableSkills
-  // (so Review can offer leaves not currently composed). Already-trusted locked
-  // content materializes silently; link/local deps carry no lock and are skipped.
+  // Re-fetch each github dep to populate availableSkills (so Review can offer
+  // leaves not currently composed). A dep still locked at the same commit
+  // materializes silently; a new/changed pin runs the trust gate (ADR-0014) so
+  // edit can't silently adopt untrusted executable content. link/local deps
+  // carry no lock and are skipped (their leaves stay the composed set). If the
+  // upstream is unreachable, keep the locked pin and open Review anyway.
   const lock = readLock(lockPathFor(entry.path));
   for (const dep of draft.deps) {
     const coord = parseCoordinate(dep.coordinate);
     if (coord.transport !== "github") continue;
-    const lockedCommit = lock?.deps[dep.alias]?.commit;
-    const checkout = ensureCheckout({
-      coord,
-      url: githubUrl(coord, env),
-      storeRoot: storeRootDir(env),
-      ...(lockedCommit !== undefined ? { lockedCommit } : {}),
-    });
+    const locked = lock?.deps[dep.alias];
+    const lockedCommit = locked?.coordinate === dep.coordinate ? locked.commit : undefined;
+    let checkout: ReturnType<typeof ensureCheckout>;
+    try {
+      checkout = ensureCheckout({
+        coord,
+        url: githubUrl(coord, env),
+        storeRoot: storeRootDir(env),
+        ...(lockedCommit !== undefined ? { lockedCommit } : {}),
+      });
+    } catch {
+      process.stderr.write(
+        `warning: could not fetch dependency '${dep.alias}' (${dep.coordinate}); keeping its locked pin\n`,
+      );
+      if (locked !== undefined) {
+        dep.commit = locked.commit;
+        dep.contentHash = locked.contentHash;
+      }
+      continue;
+    }
+    const changed =
+      locked === undefined ||
+      locked.commit !== checkout.commit ||
+      locked.contentHash !== checkout.contentHash;
+    if (changed) {
+      await gateTrust({
+        changes: planTrust(null, checkout.dir),
+        interactive: true,
+        yes: false,
+        confirm: confirmExecTrust,
+        write: (s) => process.stderr.write(s),
+        what: `dependency '${dep.alias}' (${dep.coordinate})`,
+      });
+    }
     dep.commit = checkout.commit;
     dep.contentHash = checkout.contentHash;
     dep.dir = checkout.dir;

@@ -94,6 +94,21 @@ export function removeRefEdit(raw: string, ref: string): string {
   });
 }
 
+/**
+ * Remove one exact ref from a SINGLE kind list. Unlike removeRefEdit, this does
+ * not touch the other lists — so dropping skill `a/x` leaves a same-named hook
+ * `a/x` intact.
+ */
+export function removeRefFromKindEdit(
+  raw: string,
+  kind: (typeof REF_LISTS)[number],
+  ref: string,
+): string {
+  return withFrontmatterDoc(raw, (doc) => {
+    removeFromList(doc, kind, (s) => s === ref);
+  });
+}
+
 /** Rewrite the frontmatter `name:` field (for fork). */
 export function renameBundleEdit(raw: string, newName: string): string {
   return withFrontmatterDoc(raw, (doc) => {

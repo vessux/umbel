@@ -2,8 +2,14 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { stringify } from "yaml";
 import type { BundleManifest } from "../bundle/manifest.ts";
+import { parseCoordinate } from "../store/coordinate.ts";
 import { type LockFile, lockPathFor, writeLock } from "../store/lock.ts";
-import { addRefEdit, removeDepEdit, removeRefEdit, setDepEdit } from "../store/manifest-edit.ts";
+import {
+  addRefEdit,
+  removeDepEdit,
+  removeRefFromKindEdit,
+  setDepEdit,
+} from "../store/manifest-edit.ts";
 
 export interface DepDraft {
   alias: string;
@@ -109,7 +115,9 @@ export function manifestEditsForDraft(raw: string, original: BundleManifest, d: 
   for (const kind of ["skills", "agents"] as const) {
     const want = new Set(desired[kind]);
     const have = new Set(orig[kind]);
-    for (const ref of orig[kind]) if (!want.has(ref)) out = removeRefEdit(out, ref);
+    // Kind-scoped removal: dropping a skill ref must not delete a same-named
+    // hook/mcp ref the wizard doesn't manage.
+    for (const ref of orig[kind]) if (!want.has(ref)) out = removeRefFromKindEdit(out, kind, ref);
     for (const ref of desired[kind]) if (!have.has(ref)) out = addRefEdit(out, kind, ref);
   }
   return out;
@@ -118,6 +126,11 @@ export function manifestEditsForDraft(raw: string, original: BundleManifest, d: 
 export function lockFromDraft(d: Draft): LockFile {
   const deps: LockFile["deps"] = {};
   for (const dep of d.deps) {
+    // Only github deps are reproducible and enter the lock (ADR-0013); link:/
+    // local carry no pin. An empty commit/hash means "unpinnable" (fetch failed
+    // or not yet resolved) — omit it rather than write an entry parseLock rejects.
+    if (parseCoordinate(dep.coordinate).transport !== "github") continue;
+    if (dep.commit.length === 0 || dep.contentHash.length === 0) continue;
     deps[dep.alias] = {
       coordinate: dep.coordinate,
       commit: dep.commit,

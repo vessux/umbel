@@ -9,6 +9,7 @@ import {
   addRefEdit,
   removeDepEdit,
   removeRefEdit,
+  removeRefFromKindEdit,
   renameBundleEdit,
   setDepEdit,
 } from "../../../src/store/manifest-edit.ts";
@@ -127,6 +128,15 @@ describe("removeRefEdit", () => {
     expect(out).not.toContain("tdd/writing");
     expect(out).toContain("tdd/reviewing");
     expect(out).toContain("tdd: github:org/tdd@v1");
+  });
+});
+
+describe("removeRefFromKindEdit", () => {
+  it("removes the ref from the named list only, leaving a same-named ref in another kind", () => {
+    const raw = "---\nname: d\nskills:\n  - a/x\nhooks:\n  - a/x\n---\n";
+    const out = removeRefFromKindEdit(raw, "skills", "a/x");
+    expect(out).toMatch(/hooks:\n\s+- a\/x/);
+    expect(out).not.toMatch(/skills:/);
   });
 });
 

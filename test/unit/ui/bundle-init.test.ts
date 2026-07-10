@@ -124,6 +124,79 @@ describe("runEditWizard", () => {
     expect(existsSync(join(userDir, "demo.lock"))).toBe(true);
     cleanup(root);
   });
+
+  it("trust-gates a github dep whose pin is not yet locked; refusal aborts before writing", async () => {
+    const root = makeTmpDir();
+    const gh = join(root, "gh", "acme", "tools");
+    makeGitFixture(
+      gh,
+      {
+        "skills/greet/SKILL.md": "---\nname: greet\n---\n",
+        "hooks/deploy/HOOK.md":
+          "---\nname: deploy\nevent: PreToolUse\nmatcher: Bash\ncommand: ./x.sh\n---\n",
+      },
+      "v1",
+    );
+    const userDir = join(root, "config", "bundles");
+    mkdirSync(userDir, { recursive: true });
+    // No sibling lock ⇒ the dep is unpinned ⇒ edit re-resolves and must gate.
+    writeFileSync(
+      join(userDir, "demo.md"),
+      "---\nname: demo\ndeps:\n  tools: github:acme/tools@v1\nskills: [tools/greet]\n---\n",
+    );
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_ARTIFACTS_DIR: join(root, "config"),
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.confirm).mockResolvedValueOnce(false); // refuse trust
+
+    await expect(runEditWizard(["demo"], env, root)).rejects.toBeTruthy();
+    // The manifest is untouched (no write on abort).
+    expect(readFileSync(join(userDir, "demo.md"), "utf8")).not.toMatch(/tools\/wave/);
+    cleanup(root);
+  });
+
+  it("tolerates an unfetchable github dep — keeps its locked pin and still opens", async () => {
+    const root = makeTmpDir();
+    const userDir = join(root, "config", "bundles");
+    mkdirSync(userDir, { recursive: true });
+    writeFileSync(
+      join(userDir, "demo.md"),
+      "---\nname: demo\ndeps:\n  tools: github:acme/tools@v1\nskills: [tools/greet]\n---\n",
+    );
+    // A valid lock, but an empty github base ⇒ the fetch of the pinned commit fails.
+    writeFileSync(
+      join(userDir, "demo.lock"),
+      `${JSON.stringify(
+        {
+          version: 1,
+          deps: {
+            tools: {
+              coordinate: "github:acme/tools@v1",
+              commit: "a".repeat(40),
+              contentHash: "b".repeat(64),
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "empty")}`,
+      UMBEL_ARTIFACTS_DIR: join(root, "config"),
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.select).mockResolvedValueOnce("write");
+
+    const rc = await runEditWizard(["demo"], env, root);
+    expect(rc).toBe(0);
+    // The locked pin is preserved, not corrupted.
+    const lock = JSON.parse(readFileSync(join(userDir, "demo.lock"), "utf8"));
+    expect(lock.deps.tools.commit).toBe("a".repeat(40));
+    cleanup(root);
+  });
 });
 
 describe("addDependencyInteractive", () => {

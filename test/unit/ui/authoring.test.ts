@@ -153,6 +153,49 @@ describe("lockFromDraft", () => {
   it("yields an empty deps map when there are no deps", () => {
     expect(lockFromDraft(draft({})).deps).toEqual({});
   });
+
+  it("excludes link:/local deps — they never enter the lock", () => {
+    const d = draft({
+      deps: [
+        {
+          alias: "loc",
+          coordinate: "local",
+          commit: "",
+          contentHash: "",
+          dir: "/x",
+          availableSkills: [],
+          selectedSkills: [],
+        },
+        {
+          alias: "mylink",
+          coordinate: "link:${HOME}/x",
+          commit: "",
+          contentHash: "",
+          dir: "/y",
+          availableSkills: [],
+          selectedSkills: [],
+        },
+      ],
+    });
+    expect(lockFromDraft(d).deps).toEqual({});
+  });
+
+  it("excludes an un-pinned github dep (empty commit) rather than writing a corrupt entry", () => {
+    const d = draft({
+      deps: [
+        {
+          alias: "tools",
+          coordinate: "github:acme/tools@v1",
+          commit: "",
+          contentHash: "",
+          dir: "/x",
+          availableSkills: ["g"],
+          selectedSkills: ["g"],
+        },
+      ],
+    });
+    expect(lockFromDraft(d).deps).toEqual({});
+  });
 });
 
 describe("manifestEditsForDraft", () => {
@@ -183,6 +226,19 @@ describe("manifestEditsForDraft", () => {
     expect(out).toMatch(/tools\/greet/);
     expect(out).toMatch(/local\/review/);
     expect(out).not.toMatch(/local\/old/);
+  });
+
+  it("dropping a skill ref does not collaterally delete a same-named hook/mcp ref", () => {
+    const raw = "---\nname: b\nskills:\n  - a/x\n  - a/y\nhooks:\n  - a/x\n---\n";
+    const original = {
+      name: "b",
+      skills: ["a/x", "a/y"],
+      hooks: ["a/x"],
+    } as unknown as BundleManifest;
+    const out = manifestEditsForDraft(raw, original, draft({ poolSkills: ["a/y"] }));
+    expect(out).toMatch(/hooks:\n\s+- a\/x/); // hook preserved
+    expect(out).toMatch(/skills:\n\s+- a\/y/); // skills kept a/y
+    expect(out.match(/- a\/x/g)?.length).toBe(1); // a/x survives ONLY as the hook
   });
 
   it("removes a dependency that is gone from the Draft", () => {
