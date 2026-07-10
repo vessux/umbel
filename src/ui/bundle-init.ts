@@ -3,12 +3,18 @@ import { dirname, join } from "node:path";
 import { multiselect, select, text } from "@clack/prompts";
 import type { BundleEntry } from "../bundle/discover.ts";
 import { discoverBundles } from "../bundle/discover.ts";
+import { storeRootDir } from "../bundle/env.ts";
 import { NAME_RE } from "../bundle/manifest.ts";
 import { findProjectRoot } from "../bundle/pin.ts";
-import { NotFoundError } from "../errors.ts";
+import { NotFoundError, UsageError } from "../errors.ts";
 import { walkArtifactRoot } from "../source/walk.ts";
+import { listSkillLeaves } from "../store/artifacts.ts";
+import { ALIAS_RE, deriveAlias, githubUrl, parseCoordinate } from "../store/coordinate.ts";
+import { ensureCheckout } from "../store/store.ts";
+import { gateTrust, planTrust } from "../store/trust.ts";
+import type { DepDraft } from "./authoring.ts";
 import { type GroupedOption, bucketByQualifiedName, pickGrouped } from "./picker.ts";
-import { PICKER_MAX_VISIBLE, assertSelected } from "./prompt.ts";
+import { PICKER_MAX_VISIBLE, assertSelected, confirmExecTrust } from "./prompt.ts";
 
 export interface InitAnswers {
   name: string;
@@ -162,6 +168,90 @@ async function pickWithInherited(
     maxItems: Math.min(PICKER_MAX_VISIBLE, options.length),
   });
   return Array.from(v);
+}
+
+export interface DepAddContext {
+  env: NodeJS.ProcessEnv;
+  existingAliases: Set<string>;
+}
+
+/**
+ * The wizard's "add a dependency" step (ADR-0015): coordinate → fetch →
+ * trust-gate → name the alias → pick that dep's skills (all-checked). Returns a
+ * DepDraft, or null when the dep ships no skills (nothing to compose).
+ */
+export async function addDependencyInteractive(ctx: DepAddContext): Promise<DepDraft | null> {
+  const rawCoord = assertSelected(
+    await text({
+      message: "Dependency coordinate (github:<org>/<repo>@<tag>):",
+      validate: (v) => validateGithubCoord(v ?? ""),
+    }),
+  );
+  const coord = parseCoordinate(rawCoord);
+  const suggested = deriveAlias(coord);
+  const alias = assertSelected(
+    await text({
+      message: "Alias for this dependency:",
+      initialValue: suggested,
+      validate: (v) => {
+        if (!ALIAS_RE.test(v ?? "")) return `alias must match ${ALIAS_RE.source}`;
+        if (ctx.existingAliases.has(v ?? "")) return `alias '${v}' is already used in this bundle`;
+        return undefined;
+      },
+    }),
+  );
+
+  const checkout = ensureCheckout({
+    coord,
+    url: githubUrl(coord, ctx.env),
+    storeRoot: storeRootDir(ctx.env),
+  });
+
+  await gateTrust({
+    changes: planTrust(null, checkout.dir),
+    interactive: true,
+    yes: false,
+    confirm: confirmExecTrust,
+    write: (s) => process.stderr.write(s),
+    what: `dependency '${alias}' (${coord.raw})`,
+  });
+
+  const leaves = [...listSkillLeaves(checkout.dir).keys()].sort();
+  if (leaves.length === 0) {
+    process.stderr.write(`no skills found in ${coord.raw}; skipping\n`);
+    return null;
+  }
+  const options: GroupedOption<string>[] = leaves.map((l) => ({ value: l, label: l }));
+  const picked = await pickGrouped<string>({
+    message: `Select skills from '${alias}':`,
+    groups: bucketByQualifiedName(options, (o) => o.value),
+    initialValues: leaves, // freshly-added deps default all-checked
+    required: false,
+    maxItems: Math.min(PICKER_MAX_VISIBLE, options.length),
+  });
+  return {
+    alias,
+    coordinate: coord.raw,
+    commit: checkout.commit,
+    contentHash: checkout.contentHash,
+    dir: checkout.dir,
+    availableSkills: leaves,
+    selectedSkills: [...picked].sort(),
+  };
+}
+
+function validateGithubCoord(v: string): string | undefined {
+  if (v.trim().length === 0) return "coordinate required";
+  let coord: ReturnType<typeof parseCoordinate>;
+  try {
+    coord = parseCoordinate(v);
+  } catch (err) {
+    return err instanceof UsageError ? err.message : String(err);
+  }
+  if (coord.transport !== "github") {
+    return "the wizard supports github: deps only; hand-edit deps: for link:/local (see umbel-cwb)";
+  }
+  return undefined;
 }
 
 export function listAvailableArtifacts(rootDir: string, artifactFile: string): string[] {

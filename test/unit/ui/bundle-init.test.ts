@@ -1,9 +1,25 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@clack/prompts", () => ({
+  text: vi.fn(),
+  select: vi.fn(),
+  multiselect: vi.fn(),
+  groupMultiselect: vi.fn(),
+  confirm: vi.fn(),
+  isCancel: () => false,
+  spinner: () => ({ start() {}, stop() {} }),
+}));
+
+import * as clack from "@clack/prompts";
 import { loadManifest } from "../../../src/bundle/manifest.ts";
-import { listAvailableArtifacts, renderInitManifest } from "../../../src/ui/bundle-init.ts";
+import {
+  addDependencyInteractive,
+  listAvailableArtifacts,
+  renderInitManifest,
+} from "../../../src/ui/bundle-init.ts";
+import { makeGitFixture } from "../../helpers/git.ts";
 import { buildSourceTree, cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 describe("renderInitManifest", () => {
@@ -84,6 +100,26 @@ describe("renderInitManifest", () => {
     });
     expect(out).not.toMatch(/^skills:/m);
     expect(out).not.toMatch(/^agents:/m);
+  });
+});
+
+describe("addDependencyInteractive", () => {
+  it("fetches a github dep, gates trust, and returns a DepDraft with all skills pre-selected", async () => {
+    const root = makeTmpDir();
+    const gh = join(root, "gh", "acme", "tools");
+    makeGitFixture(gh, { "skills/greet/SKILL.md": "---\nname: greet\n---\n" }, "v1");
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.text).mockResolvedValueOnce("github:acme/tools@v1");
+    vi.mocked(clack.text).mockResolvedValueOnce("tools");
+    vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["greet"]);
+    const dep = await addDependencyInteractive({ env, existingAliases: new Set() });
+    expect(dep?.alias).toBe("tools");
+    expect(dep?.selectedSkills).toEqual(["greet"]);
+    expect(dep?.commit).toMatch(/^[0-9a-f]{40}$/);
+    cleanup(root);
   });
 });
 
