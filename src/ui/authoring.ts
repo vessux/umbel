@@ -1,4 +1,5 @@
 import { stringify } from "yaml";
+import type { BundleManifest } from "../bundle/manifest.ts";
 
 export interface DepDraft {
   alias: string;
@@ -42,6 +43,42 @@ function dedupeMinus(refs: string[], exclude: string[]): string[] {
     out.push(r);
   }
   return out;
+}
+
+export function draftFromManifest(
+  name: string,
+  m: BundleManifest,
+  scope: "user" | "project",
+  inherited: { skills: string[]; agents: string[] },
+): Draft {
+  const depAliases = Object.keys(m.deps ?? {});
+  const isDepRef = (ref: string) => depAliases.some((a) => ref.startsWith(`${a}/`));
+  const deps: DepDraft[] = depAliases.map((alias) => {
+    const leaves = (m.skills ?? [])
+      .filter((r) => r.startsWith(`${alias}/`))
+      .map((r) => r.slice(alias.length + 1))
+      .sort();
+    return {
+      alias,
+      coordinate: m.deps![alias]!,
+      commit: "",
+      contentHash: "",
+      dir: "",
+      availableSkills: leaves,
+      selectedSkills: leaves,
+    };
+  });
+  return {
+    name,
+    description: m.description ?? "",
+    scope,
+    extendsList: [...(m.extends ?? [])],
+    deps,
+    poolSkills: (m.skills ?? []).filter((r) => !isDepRef(r)).sort(),
+    poolAgents: [...(m.agents ?? [])].sort(),
+    inheritedSkills: [...inherited.skills],
+    inheritedAgents: [...inherited.agents],
+  };
 }
 
 export function renderManifest(d: Draft): string {

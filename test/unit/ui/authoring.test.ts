@@ -1,8 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { BundleManifest } from "../../../src/bundle/manifest.ts";
 import { loadManifest } from "../../../src/bundle/manifest.ts";
-import { type Draft, renderManifest } from "../../../src/ui/authoring.ts";
+import { type Draft, draftFromManifest, renderManifest } from "../../../src/ui/authoring.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
 function draft(over: Partial<Draft>): Draft {
@@ -92,5 +93,27 @@ describe("renderManifest", () => {
     const out = renderManifest(draft({ extendsList: ["base"] }));
     const { manifest } = writeAndLoad("demo", out);
     expect(manifest.extends).toEqual(["base"]);
+  });
+});
+
+describe("draftFromManifest", () => {
+  it("splits dep refs from pool refs by the deps map keys", () => {
+    const m = {
+      name: "b",
+      description: "d",
+      extends: ["base"],
+      deps: { tools: "github:acme/tools@v1" },
+      skills: ["tools/greet", "tools/wave", "local/review"],
+      agents: ["local/scout"],
+    } as unknown as BundleManifest;
+    const d = draftFromManifest("b", m, "project", { skills: ["base/tdd"], agents: [] });
+    expect(d.deps).toHaveLength(1);
+    expect(d.deps[0]?.alias).toBe("tools");
+    expect(d.deps[0]?.selectedSkills).toEqual(["greet", "wave"]);
+    expect(d.poolSkills).toEqual(["local/review"]);
+    expect(d.poolAgents).toEqual(["local/scout"]);
+    expect(d.inheritedSkills).toEqual(["base/tdd"]);
+    expect(d.extendsList).toEqual(["base"]);
+    expect(d.scope).toBe("project");
   });
 });
