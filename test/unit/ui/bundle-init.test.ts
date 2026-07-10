@@ -14,13 +14,19 @@ vi.mock("@clack/prompts", () => ({
 
 import * as clack from "@clack/prompts";
 import { loadManifest } from "../../../src/bundle/manifest.ts";
+import type { Draft } from "../../../src/ui/authoring.ts";
 import {
   addDependencyInteractive,
   listAvailableArtifacts,
   renderInitManifest,
+  runReview,
 } from "../../../src/ui/bundle-init.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
 import { buildSourceTree, cleanup, makeTmpDir } from "../../helpers/tmp.ts";
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
 
 describe("renderInitManifest", () => {
   let dir: string;
@@ -120,6 +126,93 @@ describe("addDependencyInteractive", () => {
     expect(dep?.selectedSkills).toEqual(["greet"]);
     expect(dep?.commit).toMatch(/^[0-9a-f]{40}$/);
     cleanup(root);
+  });
+});
+
+describe("runReview", () => {
+  const NO_ROOTS = { skills: "/nope/skills", agents: "/nope/agents" };
+
+  function reviewDraft(over: Partial<Draft>): Draft {
+    return {
+      name: "b",
+      description: "",
+      scope: "user",
+      extendsList: ["base"],
+      deps: [],
+      poolSkills: [],
+      poolAgents: [],
+      inheritedSkills: ["base/tdd"],
+      inheritedAgents: [],
+      ...over,
+    };
+  }
+
+  it("write action returns the draft unchanged", async () => {
+    vi.mocked(clack.select).mockResolvedValueOnce("write");
+    const out = await runReview(reviewDraft({ poolSkills: ["local/x"] }), {
+      env: {} as NodeJS.ProcessEnv,
+      artifactRoots: NO_ROOTS,
+    });
+    expect(out.poolSkills).toEqual(["local/x"]);
+  });
+
+  it("re-pick skills applies the new selection and never stores inherited", async () => {
+    vi.mocked(clack.select).mockResolvedValueOnce("skills");
+    vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["base/tdd", "local/y"]);
+    vi.mocked(clack.select).mockResolvedValueOnce("write");
+    const out = await runReview(reviewDraft({ poolSkills: ["local/x"] }), {
+      env: {} as NodeJS.ProcessEnv,
+      artifactRoots: NO_ROOTS,
+    });
+    expect(out.poolSkills.sort()).toEqual(["local/y"]);
+  });
+
+  it("re-pick routes a dep's leaf back onto that dep, not the pool", async () => {
+    const dep = {
+      alias: "tools",
+      coordinate: "github:acme/tools@v1",
+      commit: "a".repeat(40),
+      contentHash: "b".repeat(64),
+      dir: "/x",
+      availableSkills: ["greet", "wave"],
+      selectedSkills: ["greet"],
+    };
+    vi.mocked(clack.select).mockResolvedValueOnce("skills");
+    vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["tools/greet", "tools/wave"]);
+    vi.mocked(clack.select).mockResolvedValueOnce("write");
+    const out = await runReview(reviewDraft({ deps: [dep] }), {
+      env: {} as NodeJS.ProcessEnv,
+      artifactRoots: NO_ROOTS,
+    });
+    expect(out.deps[0]?.selectedSkills).toEqual(["greet", "wave"]);
+    expect(out.poolSkills).toEqual([]);
+  });
+
+  it("remove-dep drops the dependency from the draft", async () => {
+    const dep = {
+      alias: "tools",
+      coordinate: "github:acme/tools@v1",
+      commit: "a".repeat(40),
+      contentHash: "b".repeat(64),
+      dir: "/x",
+      availableSkills: ["greet"],
+      selectedSkills: ["greet"],
+    };
+    vi.mocked(clack.select).mockResolvedValueOnce("rmdep");
+    vi.mocked(clack.select).mockResolvedValueOnce("tools");
+    vi.mocked(clack.select).mockResolvedValueOnce("write");
+    const out = await runReview(reviewDraft({ deps: [dep] }), {
+      env: {} as NodeJS.ProcessEnv,
+      artifactRoots: NO_ROOTS,
+    });
+    expect(out.deps).toEqual([]);
+  });
+
+  it("cancel aborts", async () => {
+    vi.mocked(clack.select).mockResolvedValueOnce("cancel");
+    await expect(
+      runReview(reviewDraft({}), { env: {} as NodeJS.ProcessEnv, artifactRoots: NO_ROOTS }),
+    ).rejects.toBeTruthy();
   });
 });
 

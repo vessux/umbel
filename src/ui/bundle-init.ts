@@ -6,13 +6,13 @@ import { discoverBundles } from "../bundle/discover.ts";
 import { storeRootDir } from "../bundle/env.ts";
 import { NAME_RE } from "../bundle/manifest.ts";
 import { findProjectRoot } from "../bundle/pin.ts";
-import { NotFoundError, UsageError } from "../errors.ts";
+import { CancelledError, NotFoundError, UsageError } from "../errors.ts";
 import { walkArtifactRoot } from "../source/walk.ts";
 import { listSkillLeaves } from "../store/artifacts.ts";
 import { ALIAS_RE, deriveAlias, githubUrl, parseCoordinate } from "../store/coordinate.ts";
 import { ensureCheckout } from "../store/store.ts";
 import { gateTrust, planTrust } from "../store/trust.ts";
-import type { DepDraft } from "./authoring.ts";
+import type { DepDraft, Draft } from "./authoring.ts";
 import { type GroupedOption, bucketByQualifiedName, pickGrouped } from "./picker.ts";
 import { PICKER_MAX_VISIBLE, assertSelected, confirmExecTrust } from "./prompt.ts";
 
@@ -252,6 +252,140 @@ function validateGithubCoord(v: string): string | undefined {
     return "the wizard supports github: deps only; hand-edit deps: for link:/local (see umbel-cwb)";
   }
   return undefined;
+}
+
+export interface ReviewContext {
+  env: NodeJS.ProcessEnv;
+  artifactRoots: { skills: string; agents: string };
+}
+
+/**
+ * The unified Review (ADR-0015): an action loop over the Draft — add a
+ * dependency / re-pick skills / re-pick agents / remove a dependency / write /
+ * cancel. `extends`-inherited artifacts render pre-checked AND locked. Returns
+ * the finalized Draft on "write"; throws CancelledError on "cancel".
+ */
+export async function runReview(draft: Draft, ctx: ReviewContext): Promise<Draft> {
+  let d = draft;
+  for (;;) {
+    const action = assertSelected(
+      await select<string>({
+        message: reviewSummary(d),
+        options: [
+          { value: "dep", label: "Add a dependency" },
+          { value: "skills", label: "Re-pick skills" },
+          { value: "agents", label: "Re-pick agents" },
+          ...(d.deps.length > 0 ? [{ value: "rmdep", label: "Remove a dependency" }] : []),
+          { value: "write", label: "Write bundle.md + lock" },
+          { value: "cancel", label: "Cancel (discard)" },
+        ],
+      }),
+    );
+    if (action === "write") return d;
+    if (action === "cancel") throw new CancelledError();
+    if (action === "dep") {
+      const dep = await addDependencyInteractive({
+        env: ctx.env,
+        existingAliases: new Set(d.deps.map((x) => x.alias)),
+      });
+      if (dep) d = { ...d, deps: [...d.deps, dep] };
+    } else if (action === "rmdep") {
+      d = await removeDepInteractive(d);
+    } else if (action === "skills") {
+      d = await repickSkills(d, ctx);
+    } else if (action === "agents") {
+      d = await repickAgents(d, ctx);
+    }
+  }
+}
+
+function reviewSummary(d: Draft): string {
+  const depN = d.deps.length;
+  const skillN = d.deps.reduce((n, x) => n + x.selectedSkills.length, 0) + d.poolSkills.length;
+  return `Review '${d.name}' — ${depN} dep(s), ${skillN} skill(s), ${d.poolAgents.length} agent(s)`;
+}
+
+function dedupe(arr: string[]): string[] {
+  return [...new Set(arr)];
+}
+
+function headOf(ref: string): string {
+  const slash = ref.indexOf("/");
+  return slash >= 0 ? ref.slice(0, slash) : ref;
+}
+
+function lockedOptions(candidates: string[], locked: Set<string>): GroupedOption<string>[] {
+  return candidates.map((ref) => ({
+    value: ref,
+    label: locked.has(ref) ? `${ref}  [inherited]` : ref,
+    ...(locked.has(ref) ? { disabled: true as const, hint: "(inherited from parent)" } : {}),
+  }));
+}
+
+async function repickSkills(d: Draft, ctx: ReviewContext): Promise<Draft> {
+  const inherited = new Set(d.inheritedSkills);
+  const depAliases = new Set(d.deps.map((x) => x.alias));
+  const depRefs = d.deps.flatMap((x) => x.availableSkills.map((l) => `${x.alias}/${l}`));
+  const poolUniverse = listAvailableArtifacts(ctx.artifactRoots.skills, "SKILL.md").filter(
+    (ref) => !depAliases.has(headOf(ref)),
+  );
+  const candidates = dedupe([...depRefs, ...poolUniverse, ...d.poolSkills, ...d.inheritedSkills]);
+  if (candidates.length === 0) return d;
+  const selectedNow = dedupe([
+    ...d.deps.flatMap((x) => x.selectedSkills.map((l) => `${x.alias}/${l}`)),
+    ...d.poolSkills,
+    ...d.inheritedSkills,
+  ]);
+  const picked = await pickGrouped<string>({
+    message: "Select skills (inherited are locked):",
+    groups: bucketByQualifiedName(lockedOptions(candidates, inherited), (o) => o.value),
+    initialValues: selectedNow,
+    required: false,
+    maxItems: Math.min(PICKER_MAX_VISIBLE, candidates.length),
+  });
+  return applySkillSelection(d, picked);
+}
+
+function applySkillSelection(d: Draft, picked: Set<string>): Draft {
+  const deps: DepDraft[] = d.deps.map((x) => ({ ...x, selectedSkills: [] }));
+  const byAlias = new Map(deps.map((x) => [x.alias, x] as const));
+  const inherited = new Set(d.inheritedSkills);
+  const pool: string[] = [];
+  for (const ref of picked) {
+    if (inherited.has(ref)) continue; // display-only; never stored
+    const dep = byAlias.get(headOf(ref));
+    if (dep) dep.selectedSkills.push(ref.slice(ref.indexOf("/") + 1));
+    else pool.push(ref);
+  }
+  for (const dep of deps) dep.selectedSkills.sort();
+  return { ...d, deps, poolSkills: pool.sort() };
+}
+
+async function repickAgents(d: Draft, ctx: ReviewContext): Promise<Draft> {
+  const inherited = new Set(d.inheritedAgents);
+  const universe = listAvailableArtifacts(ctx.artifactRoots.agents, "AGENT.md");
+  const candidates = dedupe([...universe, ...d.poolAgents, ...d.inheritedAgents]);
+  if (candidates.length === 0) return d;
+  const selectedNow = dedupe([...d.poolAgents, ...d.inheritedAgents]);
+  const picked = await pickGrouped<string>({
+    message: "Select agents (inherited are locked):",
+    groups: bucketByQualifiedName(lockedOptions(candidates, inherited), (o) => o.value),
+    initialValues: selectedNow,
+    required: false,
+    maxItems: Math.min(PICKER_MAX_VISIBLE, candidates.length),
+  });
+  return { ...d, poolAgents: [...picked].filter((ref) => !inherited.has(ref)).sort() };
+}
+
+async function removeDepInteractive(d: Draft): Promise<Draft> {
+  if (d.deps.length === 0) return d;
+  const alias = assertSelected(
+    await select<string>({
+      message: "Remove which dependency?",
+      options: d.deps.map((x) => ({ value: x.alias, label: `${x.alias} (${x.coordinate})` })),
+    }),
+  );
+  return { ...d, deps: d.deps.filter((x) => x.alias !== alias) };
 }
 
 export function listAvailableArtifacts(rootDir: string, artifactFile: string): string[] {
