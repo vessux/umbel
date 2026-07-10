@@ -173,6 +173,7 @@ function runBundleInit(env: NodeJS.ProcessEnv, cwd: string): Promise<number> {
     cwd,
     home: homedir(),
     artifactRoots: artifactRoots(env),
+    env,
   });
 }
 

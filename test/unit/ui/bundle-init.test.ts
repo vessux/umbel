@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,7 +18,7 @@ import type { Draft } from "../../../src/ui/authoring.ts";
 import {
   addDependencyInteractive,
   listAvailableArtifacts,
-  renderInitManifest,
+  runInitWizard,
   runReview,
 } from "../../../src/ui/bundle-init.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
@@ -28,84 +28,61 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 
-describe("renderInitManifest", () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = makeTmpDir();
-  });
-  afterEach(() => {
-    cleanup(dir);
-  });
+describe("runInitWizard", () => {
+  it("builds a bundle via the dep loop and writes manifest+lock only at the end", async () => {
+    const root = makeTmpDir();
+    const gh = join(root, "gh", "acme", "tools");
+    makeGitFixture(gh, { "skills/greet/SKILL.md": "---\nname: greet\n---\n" }, "v1");
+    const userDir = join(root, "config", "bundles");
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
 
-  function writeAndLoad(name: string, content: string) {
-    const path = join(dir, `${name}.md`);
-    writeFileSync(path, content);
-    return loadManifest(path);
-  }
+    vi.mocked(clack.text).mockResolvedValueOnce("demo"); // name
+    vi.mocked(clack.text).mockResolvedValueOnce("A demo"); // description
+    vi.mocked(clack.select).mockResolvedValueOnce("dep"); // Review: add dep
+    vi.mocked(clack.text).mockResolvedValueOnce("github:acme/tools@v1"); // coordinate
+    vi.mocked(clack.text).mockResolvedValueOnce("tools"); // alias
+    vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["greet"]); // dep skills
+    vi.mocked(clack.select).mockResolvedValueOnce("write"); // Review: write
 
-  it("renders a minimal manifest with just a name + description", () => {
-    const out = renderInitManifest({
-      name: "demo",
-      description: "Demo bundle",
-      extends: [],
-      skills: [],
-      agents: [],
+    const rc = await runInitWizard({
+      userBundlesDir: userDir,
+      projectBundlesDir: join(root, "proj", ".claude", "bundles"),
+      cwd: root,
+      home: root,
+      artifactRoots: { skills: join(root, "skills"), agents: join(root, "agents") },
+      env,
     });
-    expect(out).toContain("name: demo");
-    expect(out).toContain("description: Demo bundle");
+    expect(rc).toBe(0);
+    const path = join(userDir, "demo.md");
+    expect(existsSync(path)).toBe(true);
+    expect(loadManifest(path).manifest.skills).toEqual(["tools/greet"]);
+    expect(existsSync(join(userDir, "demo.lock"))).toBe(true);
+    cleanup(root);
   });
 
-  it("output round-trips through slice 1's parser without warnings", () => {
-    const out = renderInitManifest({
-      name: "demo",
-      description: "Demo",
-      extends: ["base"],
-      skills: ["tdd"],
-      agents: ["scout"],
-    });
-    const { manifest, warnings } = writeAndLoad("demo", out);
-    expect(warnings).toEqual([]);
-    expect(manifest.name).toBe("demo");
-    expect(manifest.extends).toEqual(["base"]);
-    expect(manifest.skills).toEqual(["tdd"]);
-    expect(manifest.agents).toEqual(["scout"]);
-  });
+  it("aborting the Review leaves no manifest on disk", async () => {
+    const root = makeTmpDir();
+    const userDir = join(root, "config", "bundles");
+    const env = { UMBEL_DATA_DIR: join(root, "data") } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.text).mockResolvedValueOnce("demo"); // name
+    vi.mocked(clack.text).mockResolvedValueOnce(""); // description
+    vi.mocked(clack.select).mockResolvedValueOnce("cancel"); // Review: cancel
 
-  it("includes empty-placeholder comments pointing to spec for runtime fields", () => {
-    const out = renderInitManifest({
-      name: "x",
-      description: "",
-      extends: [],
-      skills: [],
-      agents: [],
-    });
-    expect(out).toMatch(/\bmcps\b/);
-    expect(out).toMatch(/hooks/);
-    expect(out).toMatch(/settings/);
-    expect(out).toMatch(/spec/i);
-  });
-
-  it("omits 'extends' from frontmatter when no parents selected", () => {
-    const out = renderInitManifest({
-      name: "x",
-      description: "",
-      extends: [],
-      skills: ["a"],
-      agents: [],
-    });
-    expect(out).not.toMatch(/^extends:/m);
-  });
-
-  it("omits empty list fields rather than rendering 'foo: []'", () => {
-    const out = renderInitManifest({
-      name: "x",
-      description: "",
-      extends: [],
-      skills: [],
-      agents: [],
-    });
-    expect(out).not.toMatch(/^skills:/m);
-    expect(out).not.toMatch(/^agents:/m);
+    await expect(
+      runInitWizard({
+        userBundlesDir: userDir,
+        projectBundlesDir: join(root, "proj", ".claude", "bundles"),
+        cwd: root,
+        home: root,
+        artifactRoots: { skills: join(root, "skills"), agents: join(root, "agents") },
+        env,
+      }),
+    ).rejects.toBeTruthy();
+    expect(existsSync(join(userDir, "demo.md"))).toBe(false);
+    cleanup(root);
   });
 });
 

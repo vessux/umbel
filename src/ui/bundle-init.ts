@@ -1,5 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { multiselect, select, text } from "@clack/prompts";
 import type { BundleEntry } from "../bundle/discover.ts";
 import { discoverBundles } from "../bundle/discover.ts";
@@ -12,33 +11,9 @@ import { listSkillLeaves } from "../store/artifacts.ts";
 import { ALIAS_RE, deriveAlias, githubUrl, parseCoordinate } from "../store/coordinate.ts";
 import { ensureCheckout } from "../store/store.ts";
 import { gateTrust, planTrust } from "../store/trust.ts";
-import type { DepDraft, Draft } from "./authoring.ts";
+import { type DepDraft, type Draft, writeDraft } from "./authoring.ts";
 import { type GroupedOption, bucketByQualifiedName, pickGrouped } from "./picker.ts";
 import { PICKER_MAX_VISIBLE, assertSelected, confirmExecTrust } from "./prompt.ts";
-
-export interface InitAnswers {
-  name: string;
-  description: string;
-  extends: string[];
-  skills: string[];
-  agents: string[];
-}
-
-export function renderInitManifest(a: InitAnswers): string {
-  const lines: string[] = ["---", `name: ${a.name}`];
-  if (a.description.length > 0) lines.push(`description: ${a.description}`);
-  if (a.extends.length > 0) lines.push(`extends: [${a.extends.join(", ")}]`);
-  if (a.skills.length > 0) lines.push(`skills: [${a.skills.join(", ")}]`);
-  if (a.agents.length > 0) lines.push(`agents: [${a.agents.join(", ")}]`);
-  lines.push("# mcps, hooks, and settings can be added by hand —");
-  lines.push("# see docs/bundles-spec.md for shape and whitelist.");
-  lines.push("# mcps: []");
-  lines.push("# hooks: []");
-  lines.push("# settings: {}");
-  lines.push("---");
-  lines.push("");
-  return `${lines.join("\n")}\n`;
-}
 
 export interface InitContext {
   userBundlesDir: string;
@@ -46,8 +21,16 @@ export interface InitContext {
   cwd: string;
   home: string;
   artifactRoots: { skills: string; agents: string };
+  env: NodeJS.ProcessEnv;
 }
 
+/**
+ * The interleaved authoring wizard (ADR-0015). Prompts name/description/scope,
+ * keeps the legacy extends + pool skill/agent picking (superset), then hands off
+ * to the unified Review — where the interleaved github-dependency loop lives.
+ * Nothing is written until the Review's "write" step, so aborting leaves no
+ * manifest (only warm store from any fetches).
+ */
 export async function runInitWizard(ctx: InitContext): Promise<number> {
   const name = assertSelected(
     await text({
@@ -90,33 +73,41 @@ export async function runInitWizard(ctx: InitContext): Promise<number> {
 
   const inherited = collectInherited(extendsSel, allBundles);
 
-  const skills = await pickWithInherited(
+  const pickedSkills = await pickWithInherited(
     ctx.artifactRoots.skills,
     "SKILL.md",
     "skills",
     inherited.skills,
   );
-  const agents = await pickWithInherited(
+  const pickedAgents = await pickWithInherited(
     ctx.artifactRoots.agents,
     "AGENT.md",
     "agents",
     inherited.agents,
   );
 
-  const answers: InitAnswers = {
+  const draft: Draft = {
     name,
     description,
-    extends: extendsSel,
-    skills,
-    agents,
+    scope,
+    extendsList: extendsSel,
+    deps: [],
+    poolSkills: pickedSkills.filter((s) => !inherited.skills.has(s)).sort(),
+    poolAgents: pickedAgents.filter((a) => !inherited.agents.has(a)).sort(),
+    inheritedSkills: [...inherited.skills],
+    inheritedAgents: [...inherited.agents],
   };
-  const manifest = renderInitManifest(answers);
+
+  const finalDraft = await runReview(draft, {
+    env: ctx.env,
+    artifactRoots: ctx.artifactRoots,
+  });
 
   const outDir = scope === "user" ? ctx.userBundlesDir : ctx.projectBundlesDir;
   const outPath = join(outDir, `${name}.md`);
-  mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, manifest);
+  writeDraft(finalDraft, { mode: "create", path: outPath });
   process.stdout.write(`wrote ${outPath}\n`);
+  if (finalDraft.deps.length > 0) process.stdout.write(`lock: ${outPath.replace(/\.md$/, ".lock")}\n`);
   return 0;
 }
 
