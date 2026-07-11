@@ -178,6 +178,8 @@ umbel build [name] [--no-cache]         # warm cache, print path
 umbel apply [name] [--vanilla]          # pin <project>/.umbel-bundle + warm cache (--vanilla = pin "no bundle")
 umbel unpin                             # remove the pin
 umbel run [name] [-- ...claude args]    # launch claude (bundle if name/pin, vanilla otherwise)
+umbel try <url> [--yes] [-- ...claude args]  # fetch a repo, compose everything, launch ephemerally (untrusted code — sandbox it)
+umbel adopt <url> [name] [--yes]        # create a bundle mirroring one source (normalized + copied into the pool)
 umbel add <coord> [leaf] [--bundle <name>] [--yes]  # fetch a dependency (github:<org>/<repo>@<tag>), lock it, compose a skill
 umbel install [--frozen] [--allow-missing] [--bundle <name>] [--yes]  # reconcile deps ↔ lock + fetch (--frozen: strict; --allow-missing: tolerate an absent link: path)
 umbel update [alias] [--bundle <name>] [--yes]  # move branch-tracked pins to their newest commit + re-lock (tag/commit pins are no-ops)

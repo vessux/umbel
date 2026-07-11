@@ -17,8 +17,10 @@ Bundle verbs:
   umbel fork [newname] [--bundle <src>]  Copy a bundle into the current project to diverge (project scope).
   umbel pack [name] [--out <dir>]     Emit a self-contained plugin dir (runs under plain claude --plugin-dir).
   umbel import <dir> [name] [--yes]   Re-hydrate a packed/plugin dir into a new user-scope bundle.
+  umbel adopt <url> [name] [--yes]    Create a bundle mirroring one source (copied into the pool).
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
+  umbel try   <url> [--yes] [-- ...]  Fetch a repo, compose everything, launch ephemerally (untrusted code — sandbox it).
   umbel shim install [--force]        Install the PATH shim (~/.local/share/umbel/bin/claude).
   umbel shim uninstall                Remove the shim.
   umbel shim path                     Print the shim's absolute path.
@@ -55,6 +57,7 @@ export const BUNDLE_VERBS = new Set([
   "fork",
   "pack",
   "import",
+  "adopt",
   "apply",
   "unpin",
   "list",
@@ -64,6 +67,7 @@ export const BUNDLE_VERBS = new Set([
   "build",
   "gc",
   "shim",
+  "try",
 ]);
 
 export type Subcommand =

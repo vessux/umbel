@@ -30,6 +30,97 @@ interface IndexedArtifact {
   dir: string;
 }
 
+export interface ImportCoreOpts {
+  dir: string;
+  name: string;
+  env: NodeJS.ProcessEnv;
+  yes: boolean;
+  description?: string;
+  settings?: BundleSettings;
+  mergeMcp?: boolean;
+  headerComment?: string;
+  what: string;
+  /** CLI verb for user-facing error prefixes (`import` or `adopt`). */
+  verb: string;
+}
+
+/**
+ * Index `dir` for umbel-shaped artifacts, trust-gate its hook/MCP content, copy the
+ * leaves into the pool under namespace = `name`, and mint a user-scope `<name>.md`
+ * of bare `<name>/<leaf>` refs. Rolls back every created path on failure. Shared by
+ * `import` and `adopt`.
+ */
+export async function importNormalizedDir(opts: ImportCoreOpts): Promise<IndexedArtifact[]> {
+  const artifacts = indexArtifacts(opts.dir);
+  if (artifacts.length === 0) {
+    throw new UsageError(`umbel ${opts.verb}: no artifacts found under ${opts.dir}`);
+  }
+
+  const roots = artifactRoots(opts.env);
+  const bundlePath = join(userBundlesDir(opts.env), `${opts.name}.md`);
+  for (const kind of ARTIFACT_KINDS) {
+    const poolDir = join(roots[kind], opts.name);
+    if (existsSync(poolDir)) {
+      throw new ConflictError(
+        `umbel ${opts.verb}: '${opts.name}' already exists in the ${kind} pool at ${poolDir} (pass a different name)`,
+      );
+    }
+  }
+
+  const refs: Record<ArtifactKind, string[]> = { skills: [], agents: [], hooks: [], mcps: [] };
+  for (const a of artifacts) refs[a.kind].push(`${opts.name}/${a.leaf}`);
+
+  // Trust gate (ADR-0014): confirm new hook/MCP content before writing anything.
+  await gateTrust({
+    changes: planTrust(null, opts.dir),
+    interactive: isInteractive(opts.env),
+    yes: opts.yes,
+    confirm: confirmExecTrust,
+    write: (s) => process.stderr.write(s),
+    what: opts.what,
+  });
+
+  // Copy artifacts into the pool, then mint the manifest. The pool conflict
+  // checks proved those dirs didn't pre-exist, so on any failure we roll back
+  // everything we created — otherwise a partial pool dir would block every
+  // future import of this name.
+  try {
+    for (const a of artifacts) {
+      const dest = join(roots[a.kind], opts.name, a.leaf);
+      cpSync(a.dir, dest, { recursive: true, dereference: true });
+    }
+    mkdirSync(userBundlesDir(opts.env), { recursive: true });
+    // Exclusive create ('wx') atomically fails if the manifest already exists,
+    // rather than a check-then-write (a TOCTOU race); a pre-existing manifest is
+    // a conflict we surface without clobbering it.
+    writeFileSync(
+      bundlePath,
+      renderImportedManifest({
+        name: opts.name,
+        ...(opts.description !== undefined ? { description: opts.description } : {}),
+        refs,
+        ...(opts.settings !== undefined ? { settings: opts.settings } : {}),
+        ...(opts.mergeMcp !== undefined ? { mergeMcp: opts.mergeMcp } : {}),
+        ...(opts.headerComment !== undefined ? { headerComment: opts.headerComment } : {}),
+      }),
+      { flag: "wx" },
+    );
+  } catch (e) {
+    for (const kind of ARTIFACT_KINDS)
+      rmSync(join(roots[kind], opts.name), { recursive: true, force: true });
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new ConflictError(
+        `umbel ${opts.verb}: bundle '${opts.name}' already exists at ${bundlePath}`,
+      );
+    }
+    // A non-EEXIST failure may have left a partial manifest we did create.
+    rmSync(bundlePath, { force: true });
+    throw e;
+  }
+
+  return artifacts;
+}
+
 export async function runImport(
   rest: string[],
   env: NodeJS.ProcessEnv,
@@ -56,71 +147,21 @@ export async function runImport(
     );
   }
 
-  const artifacts = indexArtifacts(dirArg);
-  if (artifacts.length === 0) {
-    throw new UsageError(`umbel import: no artifacts found under ${dirArg}`);
-  }
-
-  const roots = artifactRoots(env);
-  const bundlePath = join(userBundlesDir(env), `${name}.md`);
-  for (const kind of ARTIFACT_KINDS) {
-    const poolDir = join(roots[kind], name);
-    if (existsSync(poolDir)) {
-      throw new ConflictError(
-        `umbel import: '${name}' already exists in the ${kind} pool at ${poolDir} (pass a different name)`,
-      );
-    }
-  }
-
-  const refs: Record<ArtifactKind, string[]> = { skills: [], agents: [], hooks: [], mcps: [] };
-  for (const a of artifacts) refs[a.kind].push(`${name}/${a.leaf}`);
   const description = umbelMeta?.description ?? pluginJson.description;
 
-  // Trust gate (ADR-0014): confirm new hook/MCP content before writing anything.
-  await gateTrust({
-    changes: planTrust(null, dirArg),
-    interactive: isInteractive(env),
+  await importNormalizedDir({
+    dir: dirArg,
+    name,
+    env,
     yes,
-    confirm: confirmExecTrust,
-    write: (s) => process.stderr.write(s),
+    ...(description !== undefined ? { description } : {}),
+    ...(umbelMeta?.settings !== undefined ? { settings: umbelMeta.settings } : {}),
+    ...(umbelMeta?.mergeMcp !== undefined ? { mergeMcp: umbelMeta.mergeMcp } : {}),
     what: `plugin '${name}' (import)`,
+    verb: "import",
   });
 
-  // Copy artifacts into the pool, then mint the manifest. The pool conflict
-  // checks proved those dirs didn't pre-exist, so on any failure we roll back
-  // everything we created — otherwise a partial pool dir would block every
-  // future import of this name.
-  try {
-    for (const a of artifacts) {
-      const dest = join(roots[a.kind], name, a.leaf);
-      cpSync(a.dir, dest, { recursive: true, dereference: true });
-    }
-    mkdirSync(userBundlesDir(env), { recursive: true });
-    // Exclusive create ('wx') atomically fails if the manifest already exists,
-    // rather than a check-then-write (a TOCTOU race); a pre-existing manifest is
-    // a conflict we surface without clobbering it.
-    writeFileSync(
-      bundlePath,
-      renderImportedManifest({
-        name,
-        ...(description !== undefined ? { description } : {}),
-        refs,
-        ...(umbelMeta?.settings !== undefined ? { settings: umbelMeta.settings } : {}),
-        ...(umbelMeta?.mergeMcp !== undefined ? { mergeMcp: umbelMeta.mergeMcp } : {}),
-      }),
-      { flag: "wx" },
-    );
-  } catch (e) {
-    for (const kind of ARTIFACT_KINDS)
-      rmSync(join(roots[kind], name), { recursive: true, force: true });
-    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new ConflictError(`umbel import: bundle '${name}' already exists at ${bundlePath}`);
-    }
-    // A non-EEXIST failure may have left a partial manifest we did create.
-    rmSync(bundlePath, { force: true });
-    throw e;
-  }
-
+  const bundlePath = join(userBundlesDir(env), `${name}.md`);
   process.stdout.write(`imported '${name}' from ${dirArg}\n`);
   process.stdout.write(`wrote ${bundlePath}\n`);
   process.stdout.write(`run: umbel apply ${name} && umbel run\n`);
@@ -175,6 +216,7 @@ function renderImportedManifest(fields: {
   refs: Record<ArtifactKind, string[]>;
   settings?: BundleSettings;
   mergeMcp?: boolean;
+  headerComment?: string;
 }): string {
   const fm: Record<string, unknown> = { name: fields.name };
   if (fields.description !== undefined) fm.description = fields.description;
@@ -185,7 +227,8 @@ function renderImportedManifest(fields: {
   if (fields.settings !== undefined && Object.keys(fields.settings).length > 0) {
     fm.settings = fields.settings;
   }
-  return `---\n${stringify(fm, { lineWidth: 0 })}---\n`;
+  const header = fields.headerComment !== undefined ? `# ${fields.headerComment}\n` : "";
+  return `---\n${header}${stringify(fm, { lineWidth: 0 })}---\n`;
 }
 
 function parseImportArgs(rest: string[]): { dirArg: string; nameArg?: string; yes: boolean } {
