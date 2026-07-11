@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -47,6 +48,42 @@ function isWithin(root: string, child: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
+// Follow ALL symlinks and confirm the real path stays within `root`.
+// Unreadable/broken path → treat as escaping (safe default).
+function withinCheckout(root: string, p: string): boolean {
+  try {
+    return isWithin(root, realpathSync(p));
+  } catch {
+    return false;
+  }
+}
+
+// cpSync that refuses any entry whose realpath escapes `root` — blocks symlink
+// exfiltration (dereference:true would otherwise copy external target bytes into
+// the derived tree). Returns false (and warns) if `from` itself escapes.
+function safeCopyInto(
+  from: string,
+  to: string,
+  root: string,
+  warnings: string[],
+  label: string,
+): boolean {
+  if (!withinCheckout(root, from)) {
+    warnings.push(`${label}: '${from}' escapes the repo (symlink) — skipped`);
+    return false;
+  }
+  cpSync(from, to, {
+    recursive: true,
+    dereference: true,
+    filter: (s) => {
+      if (withinCheckout(root, s)) return true;
+      warnings.push(`${s}: symlink escapes the repo — skipped`);
+      return false; // prune this entry/subtree; cp continues with the rest
+    },
+  });
+  return true;
+}
+
 /**
  * Turn a repo checkout into an umbel-shaped artifact tree under `dest`
  * (`<dest>/<kind>/<leaf>/<MARKER>` + sidecars). Deterministic — a pure function
@@ -72,10 +109,14 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
   }
   // Reserve + copy an umbel-shaped source dir verbatim.
   function place(kind: ArtifactKind, leaf: string, fromDir: string): void {
+    if (!withinCheckout(src, fromDir)) {
+      warnings.push(`${kind}/${leaf}: escapes the repo (symlink) — skipped`);
+      return;
+    }
     const to = register(kind, leaf);
     if (to === null) return;
     mkdirSync(to, { recursive: true });
-    cpSync(fromDir, to, { recursive: true, dereference: true });
+    safeCopyInto(fromDir, to, src, warnings, `${kind}/${leaf}`);
   }
   const uniqueLeaf = makeUniqueLeaf(seen); // used by the converters in later tasks
 
@@ -91,6 +132,10 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
         if (name === ".git") continue;
         const from = join(src, name);
         if (isDir(from)) continue; // sidecar dirs of a lone skill are ambiguous — skip
+        if (!withinCheckout(src, from)) {
+          warnings.push(`skills/${basename(to)}/${name}: escapes the repo (symlink) — skipped`);
+          continue;
+        }
         cpSync(from, join(to, name), { dereference: true });
       }
     }
@@ -102,7 +147,7 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     if (!isWithin(src, agentsDir)) {
       warnings.push(".claude-plugin agents path escapes the repo — skipped");
     } else {
-      indexPluginAgents(agentsDir, register);
+      indexPluginAgents(agentsDir, src, register, warnings);
     }
 
     const commandsDir = join(src, plugin.commands ?? "commands");
@@ -196,15 +241,26 @@ function readPluginJson(src: string, warnings: string[]): PluginJson | null {
 // Convert CC agent .md FILES under agentsDir into agents/<name>/AGENT.md dirs.
 function indexPluginAgents(
   agentsDir: string,
+  root: string,
   register: (k: ArtifactKind, leaf: string) => string | null,
+  warnings: string[],
 ): void {
+  if (!withinCheckout(root, agentsDir)) {
+    warnings.push(".claude-plugin agents dir escapes the repo — skipped");
+    return;
+  }
   if (!isDir(agentsDir)) return;
   for (const name of readdirSync(agentsDir).sort()) {
     if (!name.endsWith(".md")) continue;
+    const from = join(agentsDir, name);
+    if (!withinCheckout(root, from)) {
+      warnings.push(`agents/${name}: escapes the repo (symlink) — skipped`);
+      continue;
+    }
     const dir = register("agents", name.slice(0, -3));
     if (dir === null) continue;
     mkdirSync(dir, { recursive: true });
-    cpSync(join(agentsDir, name), join(dir, "AGENT.md"), { dereference: true });
+    cpSync(from, join(dir, "AGENT.md"), { dereference: true });
   }
 }
 
@@ -266,12 +322,17 @@ function convertCommand(
     );
   }
   const from = join(srcRoot, rel);
-  if (existsSync(from)) {
+  if (!existsSync(from)) {
+    warnings.push(`${what}: \${CLAUDE_PLUGIN_ROOT}/${rel} not found in the repo`);
+  } else if (!withinCheckout(srcRoot, from)) {
+    warnings.push(
+      `${what}: \${CLAUDE_PLUGIN_ROOT}/${rel} escapes the plugin root (symlink) — left unconverted`,
+    );
+    return command;
+  } else {
     const to = join(destDir, rel);
     mkdirSync(dirname(to), { recursive: true });
-    cpSync(from, to, { recursive: true, dereference: true });
-  } else {
-    warnings.push(`${what}: \${CLAUDE_PLUGIN_ROOT}/${rel} not found in the repo`);
+    safeCopyInto(from, to, srcRoot, warnings, what);
   }
   return `./${rel}${rest.length > 0 ? ` ${rest}` : ""}`;
 }

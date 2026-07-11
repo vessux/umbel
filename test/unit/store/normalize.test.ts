@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hashTree } from "../../../src/store/content-hash.ts";
@@ -408,5 +408,70 @@ describe("normalizeRepo — path containment", () => {
     const { artifacts, warnings } = normalizeRepo(checkout, dest);
     expect(artifacts.some((a) => a.kind === "agents")).toBe(false);
     expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+});
+
+describe("normalizeRepo — symlink containment", () => {
+  let outer: string;
+  let checkout: string;
+  let dest: string;
+  beforeEach(() => {
+    outer = makeTmpDir("umbel-outer-");
+    checkout = join(outer, "repo");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(outer);
+    cleanup(dest);
+  });
+
+  it("refuses a hook script that is a symlink escaping the checkout", () => {
+    const secret = join(outer, "secret.txt");
+    writeFile(secret, "TOP-SECRET-BYTES\n");
+    writeFile(join(checkout, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(checkout, "hooks/hooks.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              matcher: "",
+              hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh" }],
+            },
+          ],
+        },
+      }),
+    );
+    // scripts/log.sh is a symlink pointing at the outer secret file.
+    mkdirSync(join(checkout, "scripts"), { recursive: true });
+    symlinkSync(secret, join(checkout, "scripts/log.sh"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    const hook = artifacts.find((a) => a.kind === "hooks")!;
+    const md = readFileSync(join(hook.dir, "HOOK.md"), "utf8");
+    expect(md).toContain("${CLAUDE_PLUGIN_ROOT}"); // left unconverted
+    expect(existsSync(join(hook.dir, "scripts/log.sh"))).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses an agents dir that is a symlink escaping the checkout", () => {
+    writeFile(join(outer, "elsewhere/rev.md"), "---\nname: rev\n---\n");
+    writeFile(join(checkout, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    symlinkSync(join(outer, "elsewhere"), join(checkout, "agents"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "agents")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("copies an in-checkout symlink sidecar without warning (no false positive)", () => {
+    writeFile(join(checkout, "skills/s/SKILL.md"), "---\nname: s\n---\n");
+    writeFile(join(checkout, "skills/s/real.txt"), "REAL\n");
+    symlinkSync(join(checkout, "skills/s/real.txt"), join(checkout, "skills/s/link.txt"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    const skill = artifacts.find((a) => a.kind === "skills" && a.leaf === "s")!;
+    expect(readFileSync(join(skill.dir, "link.txt"), "utf8")).toBe("REAL\n");
+    expect(warnings.join(" ")).not.toMatch(/escapes/);
   });
 });
