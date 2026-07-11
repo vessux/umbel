@@ -58,7 +58,7 @@ export function compile(
 ): CompileResult {
   const hash = hashBundle(bundle, sources);
   // Single source for the version string: also written into plugin.json (see
-  // buildLayout) and returned here, so the env var and the file can't drift.
+  // emitPluginLayout) and returned here, so the env var and the file can't drift.
   const version = `0.0.0+${hash}`;
   const finalDir = bundleCachePath(opts.cacheRoot, bundle.name, hash);
   const partial = partialPath(finalDir);
@@ -77,7 +77,13 @@ export function compile(
     rmSync(finalDir, { recursive: true, force: true });
   }
   ensureDir(dirname(finalDir));
-  buildLayout(bundle, sources, version, partial, finalDir);
+  emitPluginLayout(bundle, sources, version, partial, {
+    artifactMode: "symlink",
+    // MCP commands anchor on finalDir (the post-atomic-rename path), not the
+    // .partial staging dir, so the rewritten command is valid after renameSync.
+    mcpCommandBase: (canonical) => join(finalDir, "mcps", canonical),
+    emitSettings: true,
+  });
   // Write bundle.md into `partial` but embed `finalDir` in the Invocation
   // block, so consumers reading the cache after the atomic rename see the
   // real path, not the `.partial` staging name.
@@ -91,16 +97,26 @@ export function compile(
   return { cacheDir: finalDir, version };
 }
 
-function buildLayout(
+export interface EmitOpts {
+  /** skills/agents: `symlink` (compile's launch cache) or `copy` (pack's portable dir). */
+  artifactMode: "symlink" | "copy";
+  /** Returns the command base dir for an MCP canonical name. compile → absolute
+   *  cache path; pack → `${CLAUDE_PLUGIN_ROOT}/mcps/<canonical>` (plugin-native). */
+  mcpCommandBase: (canonical: string) => string;
+  /** compile emits settings.json (consumed via --settings); a --plugin-dir plugin
+   *  can't apply umbel's setting keys, so pack passes false. */
+  emitSettings: boolean;
+}
+
+export function emitPluginLayout(
   bundle: ResolvedBundle,
   sources: ResolvedSources,
   version: string,
   dir: string,
-  finalDir: string,
+  opts: EmitOpts,
 ): void {
   ensureDir(dir);
 
-  // Plugin metadata
   const pluginDir = join(dir, ".claude-plugin");
   ensureDir(pluginDir);
   const plugin = {
@@ -110,31 +126,30 @@ function buildLayout(
   };
   writeFileSync(join(pluginDir, "plugin.json"), JSON.stringify(plugin, null, 2));
 
-  symlinkArtifacts(dir, "skills", "SKILL.md", sources.skills);
-  symlinkArtifacts(dir, "agents", "AGENT.md", sources.agents);
+  emitArtifacts(dir, "skills", "SKILL.md", sources.skills, opts.artifactMode);
+  emitArtifacts(dir, "agents", "AGENT.md", sources.agents, opts.artifactMode);
 
   emitHooks(dir, sources.hooks);
 
-  const mcpServers = emitMcps(dir, finalDir, sources.mcps);
+  const mcpServers = emitMcps(dir, sources.mcps, opts.mcpCommandBase);
   if (mcpServers && Object.keys(mcpServers).length > 0) {
     writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers }, null, 2));
   }
 
-  // settings.json carries only the bundle `settings:` field. Hooks go into the
-  // plugin's hooks/hooks.json (see emitHooks): CC resolves ${CLAUDE_PLUGIN_ROOT}
-  // only for hooks that are plugin-associated, never for hooks loaded via
-  // --settings — so a hook with a rewritten command would hard-fail there.
-  const settingsContent = buildSettings(bundle.settings);
-  if (settingsContent !== null) {
-    writeFileSync(join(dir, "settings.json"), JSON.stringify(settingsContent, null, 2));
+  if (opts.emitSettings) {
+    const settingsContent = buildSettings(bundle.settings);
+    if (settingsContent !== null) {
+      writeFileSync(join(dir, "settings.json"), JSON.stringify(settingsContent, null, 2));
+    }
   }
 }
 
-function symlinkArtifacts(
+function emitArtifacts(
   dir: string,
   kind: "skills" | "agents",
   mdFile: string,
   map: Map<string, string>,
+  mode: "symlink" | "copy",
 ): void {
   if (map.size === 0) return;
   const subdir = join(dir, kind);
@@ -149,6 +164,9 @@ function symlinkArtifacts(
       // colliding entries must be copied + rewritten so the cache dir name
       // matches the disambiguated identity.
       copyWithRenamedFrontmatter(e, target, mdFile, finalName);
+    } else if (mode === "copy") {
+      // dereference so a symlinked pool artifact is inlined — pack must be portable.
+      cpSync(e.srcDir, target, { recursive: true, dereference: true });
     } else {
       symlinkSync(e.srcDir, target);
     }
@@ -270,8 +288,8 @@ function emitHooks(cacheDir: string, map: Map<string, string>): void {
 
 function emitMcps(
   writeDir: string,
-  finalDir: string,
   map: Map<string, string>,
+  commandBase: (canonical: string) => string,
 ): Record<string, McpServerConfig> | undefined {
   if (map.size === 0) return undefined;
   const mcpsDir = join(writeDir, "mcps");
@@ -287,17 +305,12 @@ function emitMcps(
     if (typeof command !== "string" || command.length === 0) {
       throw new UsageError(`mcp ${e.ref}: frontmatter 'command' is required`);
     }
-
     const passThrough: Record<string, unknown> = { ...e.fm };
     for (const k of ["name", "description", "command"]) {
       delete passThrough[k];
     }
-
-    // Files are written into `writeDir` (the `.partial` staging dir) but the
-    // command must anchor on `finalDir` — the path the artifact lives at after
-    // the atomic rename. (writeBundleMd applies the same partial→final split.)
     out[finalName] = {
-      command: rewriteRelativeCommand(command, join(finalDir, "mcps", finalName)),
+      command: rewriteRelativeCommand(command, commandBase(finalName)),
       ...passThrough,
     };
   }

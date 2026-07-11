@@ -75,4 +75,14 @@ describe("parseSubcommand", () => {
     });
     expect(parseSubcommand(["outdated"])).toEqual({ kind: "verb", verb: "outdated", rest: [] });
   });
+
+  it("parses 'pack' as a bundle verb", () => {
+    const sub = parseSubcommand(["pack", "dev", "--out", "x"]);
+    expect(sub).toEqual({ kind: "verb", verb: "pack", rest: ["dev", "--out", "x"] });
+  });
+
+  it("parses 'import' as a bundle verb", () => {
+    const sub = parseSubcommand(["import", "./dir", "name"]);
+    expect(sub).toEqual({ kind: "verb", verb: "import", rest: ["./dir", "name"] });
+  });
 });
