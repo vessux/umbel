@@ -93,4 +93,12 @@ describe("parseSubcommand", () => {
       rest: ["https://github.com/a/b"],
     });
   });
+
+  it("recognizes adopt as a verb", () => {
+    expect(parseSubcommand(["adopt", "https://github.com/a/b"])).toEqual({
+      kind: "verb",
+      verb: "adopt",
+      rest: ["https://github.com/a/b"],
+    });
+  });
 });

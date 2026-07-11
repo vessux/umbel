@@ -35,6 +35,7 @@ import { renderShow } from "./bundle/show.ts";
 import { CliError } from "./errors.ts";
 import { installShim, uninstallShim } from "./shim/install.ts";
 import { runAdd } from "./store/add.ts";
+import { runAdopt } from "./store/adopt.ts";
 import { runFork } from "./store/fork.ts";
 import { runImport } from "./store/import.ts";
 import { runInstall } from "./store/install.ts";
@@ -106,6 +107,7 @@ async function runBundleVerb(
   if (verb === "fork") return runFork(rest, env, cwd);
   if (verb === "pack") return runPack(rest, env, cwd);
   if (verb === "import") return runImport(rest, env, cwd);
+  if (verb === "adopt") return runAdopt(rest, env, cwd);
   if (verb === "try") return runTry(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
