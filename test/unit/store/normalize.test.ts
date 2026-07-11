@@ -155,3 +155,59 @@ describe("normalizeRepo — edge branches", () => {
     expect(artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["skills/myrepo"]);
   });
 });
+
+describe("normalizeRepo — hooks.json conversion", () => {
+  let src: string;
+  let dest: string;
+  beforeEach(() => {
+    src = makeTmpDir("umbel-src-");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(src);
+    cleanup(dest);
+  });
+
+  it("converts a plugin-root script hook, copying the script + rewriting to ./", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(src, "hooks/hooks.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash",
+              hooks: [
+                { type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/log.sh", timeout: 5 },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    writeFile(join(src, "scripts/log.sh"), "#!/bin/sh\necho hi\n");
+    const { artifacts } = normalizeRepo(src, dest);
+    const hooks = artifacts.filter((a) => a.kind === "hooks");
+    expect(hooks).toHaveLength(1);
+    const hookMd = readFileSync(join(hooks[0]!.dir, "HOOK.md"), "utf8");
+    expect(hookMd).toMatch(/event: PreToolUse/);
+    expect(hookMd).toMatch(/matcher: Bash/);
+    // relpath preserved so sibling files resolve; quoting may vary per yaml lib
+    expect(hookMd).toMatch(/command:\s*["']?\.\/scripts\/log\.sh/);
+    expect(hookMd).toMatch(/timeout: 5/);
+    expect(existsSync(join(hooks[0]!.dir, "scripts/log.sh"))).toBe(true);
+  });
+
+  it("passes a literal command through verbatim (no sidecar copy)", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(src, "hooks/hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ matcher: "", hooks: [{ type: "command", command: "jq ." }] }] },
+      }),
+    );
+    const { artifacts } = normalizeRepo(src, dest);
+    const hook = artifacts.find((a) => a.kind === "hooks")!;
+    expect(readFileSync(join(hook.dir, "HOOK.md"), "utf8")).toMatch(/command:\s*["']?jq \./);
+  });
+});

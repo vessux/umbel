@@ -1,5 +1,14 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
+import { stringify as yamlStringify } from "yaml";
 import { ARTIFACT_KINDS, type ArtifactKind } from "../bundle/kinds.ts";
 import { readFrontmatter } from "../source/frontmatter.ts";
 
@@ -84,10 +93,9 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     if (existsSync(join(src, plugin.commands ?? "commands"))) {
       warnings.push("commands/ present — umbel has no 'commands' kind; skipped");
     }
-    // hooks + mcps converters are wired in a LATER task.
+    const hooksJson = resolveHooksJson(src, plugin.hooks);
+    if (existsSync(hooksJson)) convertHooksJson(hooksJson, src, register, uniqueLeaf, warnings);
   }
-
-  void uniqueLeaf; // wired to the converters in a later task
 
   artifacts.sort((a, b) =>
     a.kind === b.kind ? a.leaf.localeCompare(b.leaf) : a.kind.localeCompare(b.kind),
@@ -162,4 +170,109 @@ function indexPluginAgents(
     mkdirSync(dir, { recursive: true });
     cpSync(join(agentsDir, name), join(dir, "AGENT.md"), { dereference: true });
   }
+}
+
+const PLUGIN_ROOT_RE = /^\$\{CLAUDE_PLUGIN_ROOT\}\/(\S+)/;
+
+function slug(s: string): string {
+  const out = s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return out.length > 0 ? out : "x";
+}
+
+function writeArtifactMd(destDir: string, marker: string, fm: Record<string, unknown>): void {
+  mkdirSync(destDir, { recursive: true });
+  writeFileSync(join(destDir, marker), `---\n${yamlStringify(fm, { lineWidth: 0 })}---\n`);
+}
+
+/**
+ * If a command's leading program is `${CLAUDE_PLUGIN_ROOT}/<relpath>`, copy that
+ * file/dir from the checkout into `destDir/<relpath>` (preserving structure + exec
+ * bit) and return the command rewritten to `./<relpath>`. Literal programs pass
+ * through unchanged. Warns when the command has additional plugin-root refs in args.
+ */
+function convertCommand(
+  command: string,
+  srcRoot: string,
+  destDir: string,
+  warnings: string[],
+  what: string,
+): string {
+  const trimmed = command.trimStart();
+  const m = trimmed.match(PLUGIN_ROOT_RE);
+  const rest = trimmed.replace(/^\S+/, "").trimStart();
+  if (rest.includes("${CLAUDE_PLUGIN_ROOT}")) {
+    warnings.push(
+      `${what}: command references \${CLAUDE_PLUGIN_ROOT} in arguments — converted best-effort, review it`,
+    );
+  }
+  if (!m) return command;
+  const rel = m[1]!;
+  const from = join(srcRoot, rel);
+  if (existsSync(from)) {
+    const to = join(destDir, rel);
+    mkdirSync(join(to, ".."), { recursive: true });
+    cpSync(from, to, { recursive: true, dereference: true });
+  } else {
+    warnings.push(`${what}: \${CLAUDE_PLUGIN_ROOT}/${rel} not found in the repo`);
+  }
+  return `./${rel}${rest.length > 0 ? ` ${rest}` : ""}`;
+}
+
+interface RawHookCommand {
+  type?: string;
+  command?: string;
+  [k: string]: unknown;
+}
+
+function convertHooksJson(
+  hooksJsonPath: string,
+  srcRoot: string,
+  register: (k: ArtifactKind, leaf: string) => string | null,
+  uniqueLeaf: (base: string, kind: ArtifactKind) => string,
+  warnings: string[],
+): void {
+  let parsed: { hooks?: Record<string, Array<{ matcher?: string; hooks?: RawHookCommand[] }>> };
+  try {
+    parsed = JSON.parse(readFileSync(hooksJsonPath, "utf8"));
+  } catch {
+    warnings.push(`unreadable ${hooksJsonPath} — hooks skipped`);
+    return;
+  }
+  const events = parsed.hooks ?? {};
+  for (const [event, specs] of Object.entries(events)) {
+    for (const spec of specs) {
+      const matcher = spec.matcher ?? "";
+      for (const cmd of spec.hooks ?? []) {
+        if (cmd.type !== "command" || typeof cmd.command !== "string") {
+          warnings.push(`${event}: non-command hook skipped`);
+          continue;
+        }
+        const scriptRel = cmd.command.trimStart().match(PLUGIN_ROOT_RE)?.[1];
+        const base = scriptRel
+          ? slug(basename(scriptRel).replace(/\.\w+$/, ""))
+          : slug(`${event}-${matcher}`);
+        const dir = register("hooks", uniqueLeaf(base, "hooks"));
+        if (!dir) continue;
+        const command = convertCommand(cmd.command, srcRoot, dir, warnings, `hook ${event}`);
+        const { type: _t, command: _c, ...extras } = cmd;
+        writeArtifactMd(dir, "HOOK.md", {
+          name: basename(dir),
+          event,
+          matcher,
+          command,
+          ...extras,
+        });
+      }
+    }
+  }
+}
+
+// Resolve plugin.hooks: a .json file path, a dir (→ <dir>/hooks.json), or the default.
+function resolveHooksJson(src: string, hooks: string | undefined): string {
+  if (hooks === undefined) return join(src, "hooks/hooks.json");
+  const p = join(src, hooks);
+  return hooks.endsWith(".json") ? p : join(p, "hooks.json");
 }
