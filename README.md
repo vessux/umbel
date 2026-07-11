@@ -184,6 +184,8 @@ umbel update [alias] [--bundle <name>] [--yes]  # move branch-tracked pins to th
 umbel outdated [--bundle <name>]        # list branch deps with a newer commit available (read-only)
 umbel remove <alias> | <alias>/<leaf> [--bundle <name>]  # drop a dependency (+ its refs & lock) or one composed artifact
 umbel fork [newname] [--bundle <src>]   # copy a bundle into the current project to diverge (project scope; same-name shadow by default)
+umbel pack [name] [--out <dir>]         # compile into a self-contained CC plugin dir (runs under `claude --plugin-dir`)
+umbel import <dir> [name] [--yes]       # re-hydrate a packed/plugin dir into a new user-scope bundle
 umbel init                              # interleaved authoring wizard (deps + Review; writes manifest + lock)
 umbel edit [name] [--bundle <src>]      # reopen a bundle on the Review view (add / re-pick / remove)
 umbel gc                                # prune cache (keep newest 3 per name)
@@ -243,9 +245,9 @@ pins a **content hash** of the dependency's resolved tree, and `install
 
 On top of integrity, a **trust gate** covers the artifacts umbel wires to
 **auto-run** — hooks (fire on tool events) and MCP servers (spawn at launch).
-When `add` or `install` pulls executable content that is **new to, or changed
-from, the lock**, umbel shows a file-level diff of the affected hook/MCP
-directory and asks you to confirm before writing the lock:
+When `add`, `install`, or `import` pulls executable content that is **new to,
+or changed from, the lock**, umbel shows a file-level diff of the affected
+hook/MCP directory and asks you to confirm before writing the lock:
 
 - The confirmation unit is the **whole artifact directory's** content hash, not
   the command string — a malicious update can keep `command: ./run.sh`

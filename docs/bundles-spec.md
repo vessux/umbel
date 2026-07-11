@@ -716,6 +716,8 @@ umbel remove <alias> | <alias>/<leaf> [--bundle]  # drop a dependency or one art
 umbel update [<alias>] [--bundle] [--yes]         # move branch pins to newest + re-lock
 umbel outdated [--bundle]                         # read-only: branch deps with newer commits
 umbel fork   [<newname>] [--bundle <src>]         # project-scope divergent copy
+umbel pack   [<name>] [--out <dir>]               # emit a self-contained plugin dir (+ .umbel/ re-import metadata)
+umbel import <dir> [<name>] [--yes]               # re-hydrate a packed/plugin dir into a new user-scope bundle
 umbel list                                        # table
 umbel show   [<name>]                             # resolved view
 umbel init                                        # interleaved authoring wizard
@@ -807,6 +809,28 @@ defaults to the source name — producing a same-name **project-scope shadow** t
 takes precedence over the user-scope original. The `bundle.md` is copied with its
 `name:` rewritten (comments preserved) and its sibling lock copied verbatim, so
 the fork is immediately usable. An existing dest file is a conflict (exit 4).
+
+### `umbel pack` / `umbel import`
+
+`umbel pack [<name>] [--out <dir>]` compiles the target bundle (uniform target rule)
+into a **self-contained Claude Code plugin directory** that runs under plain
+`claude --plugin-dir <dir>` — no umbel present. Unlike the launch cache it **copies**
+skills/agents (not symlinks) and rewrites MCP commands to `${CLAUDE_PLUGIN_ROOT}/mcps/…`
+(plugin-native, per ADR-0004). A plugin can't apply umbel's whitelisted `settings`, so
+none is emitted. The bundle's authoring `bundle.md` + lock are carried under a
+CC-ignored `.umbel/` so the dir also **re-imports**. Default output is `<cwd>/<name>/`;
+an existing path is a conflict (exit 4).
+
+`umbel import <dir> [<name>]` re-hydrates a packed dir — or any plain CC plugin dir —
+into a **new user-scope bundle**. It indexes the dir's artifact subdirs, copies them into
+the artifact pool under a source namespace = the bundle name, and mints a `bundle.md` of
+bare `<name>/<leaf>` refs (no `deps:`, no lock). Hook/MCP content passes the trust gate
+(ADR-0014; `--yes` overrides, non-TTY fails closed, exit 5). Name defaults from a carried
+`.umbel/bundle.md`, else `plugin.json`, else the dir basename; a taken name is a conflict.
+
+For a **reproducible** restore of a packed bundle (github deps re-pinned), copy
+`.umbel/bundle.md` + `.umbel/<name>.lock` into `~/.config/umbel/bundles/` and run
+`umbel install --frozen <name>` — the existing thin-share path.
 
 ## Risks acknowledged
 
