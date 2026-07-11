@@ -95,6 +95,21 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     }
     const hooksJson = resolveHooksJson(src, plugin.hooks);
     if (existsSync(hooksJson)) convertHooksJson(hooksJson, src, register, uniqueLeaf, warnings);
+
+    const inline = typeof plugin.mcpServers === "object" ? plugin.mcpServers : undefined;
+    if (inline) convertMcpServers(inline, src, register, uniqueLeaf, warnings);
+    const rootMcp = join(src, ".mcp.json");
+    if (existsSync(rootMcp)) {
+      try {
+        const parsed = JSON.parse(readFileSync(rootMcp, "utf8")) as {
+          mcpServers?: Record<string, Record<string, unknown>>;
+        };
+        if (parsed.mcpServers)
+          convertMcpServers(parsed.mcpServers, src, register, uniqueLeaf, warnings);
+      } catch {
+        warnings.push(`unreadable ${rootMcp} — mcps skipped`);
+      }
+    }
   }
 
   artifacts.sort((a, b) =>
@@ -275,4 +290,25 @@ function resolveHooksJson(src: string, hooks: string | undefined): string {
   if (hooks === undefined) return join(src, "hooks/hooks.json");
   const p = join(src, hooks);
   return hooks.endsWith(".json") ? p : join(p, "hooks.json");
+}
+
+function convertMcpServers(
+  servers: Record<string, Record<string, unknown>>,
+  srcRoot: string,
+  register: (k: ArtifactKind, leaf: string) => string | null,
+  uniqueLeaf: (base: string, kind: ArtifactKind) => string,
+  warnings: string[],
+): void {
+  for (const [name, cfg] of Object.entries(servers)) {
+    const command = cfg.command;
+    if (typeof command !== "string" || command.length === 0) {
+      warnings.push(`mcp '${name}': missing command — skipped`);
+      continue;
+    }
+    const dir = register("mcps", uniqueLeaf(slug(name), "mcps"));
+    if (!dir) continue;
+    const rewritten = convertCommand(command, srcRoot, dir, warnings, `mcp ${name}`);
+    const { command: _c, ...extras } = cfg;
+    writeArtifactMd(dir, "MCP.md", { name, command: rewritten, ...extras });
+  }
 }

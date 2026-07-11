@@ -211,3 +211,42 @@ describe("normalizeRepo — hooks.json conversion", () => {
     expect(readFileSync(join(hook.dir, "HOOK.md"), "utf8")).toMatch(/command:\s*["']?jq \./);
   });
 });
+
+describe("normalizeRepo — mcpServers conversion", () => {
+  let src: string;
+  let dest: string;
+  beforeEach(() => {
+    src = makeTmpDir("umbel-src-");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(src);
+    cleanup(dest);
+  });
+
+  it("converts inline plugin.json.mcpServers to MCP.md (literal command verbatim)", () => {
+    writeFile(
+      join(src, ".claude-plugin/plugin.json"),
+      JSON.stringify({ name: "kit", mcpServers: { db: { command: "npx", args: ["duckdb-mcp"] } } }),
+    );
+    const { artifacts } = normalizeRepo(src, dest);
+    const mcp = artifacts.find((a) => a.kind === "mcps" && a.leaf === "db")!;
+    const md = readFileSync(join(mcp.dir, "MCP.md"), "utf8");
+    expect(md).toMatch(/name: db/);
+    expect(md).toMatch(/command:\s*["']?npx/);
+    expect(md).toMatch(/duckdb-mcp/);
+  });
+
+  it("converts a root .mcp.json server with a plugin-root command", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(src, ".mcp.json"),
+      JSON.stringify({ mcpServers: { srv: { command: "${CLAUDE_PLUGIN_ROOT}/bin/srv" } } }),
+    );
+    writeFile(join(src, "bin/srv"), "#!/bin/sh\n");
+    const { artifacts } = normalizeRepo(src, dest);
+    const mcp = artifacts.find((a) => a.kind === "mcps" && a.leaf === "srv")!;
+    expect(readFileSync(join(mcp.dir, "MCP.md"), "utf8")).toMatch(/command:\s*["']?\.\/bin\/srv/);
+    expect(existsSync(join(mcp.dir, "bin/srv"))).toBe(true);
+  });
+});
