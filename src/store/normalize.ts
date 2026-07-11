@@ -9,7 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { stringify as yamlStringify } from "yaml";
 import { ARTIFACT_KINDS, type ArtifactKind } from "../bundle/kinds.ts";
 import { readFrontmatter } from "../source/frontmatter.ts";
@@ -39,6 +39,12 @@ function isDir(p: string): boolean {
   } catch {
     return false;
   }
+}
+
+// True when `child` resolves inside (or equal to) `root`.
+function isWithin(root: string, child: string): boolean {
+  const rel = relative(resolve(root), resolve(child));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
 /**
@@ -92,12 +98,24 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
 
   const plugin = readPluginJson(src, warnings);
   if (plugin !== null) {
-    indexPluginAgents(join(src, plugin.agents ?? "agents"), register);
-    if (existsSync(join(src, plugin.commands ?? "commands"))) {
+    const agentsDir = join(src, plugin.agents ?? "agents");
+    if (!isWithin(src, agentsDir)) {
+      warnings.push(".claude-plugin agents path escapes the repo — skipped");
+    } else {
+      indexPluginAgents(agentsDir, register);
+    }
+
+    const commandsDir = join(src, plugin.commands ?? "commands");
+    if (isWithin(src, commandsDir) && existsSync(commandsDir)) {
       warnings.push("commands/ present — umbel has no 'commands' kind; skipped");
     }
+
     const hooksJson = resolveHooksJson(src, plugin.hooks);
-    if (existsSync(hooksJson)) convertHooksJson(hooksJson, src, register, uniqueLeaf, warnings);
+    if (!isWithin(src, hooksJson)) {
+      warnings.push(".claude-plugin hooks path escapes the repo — skipped");
+    } else if (existsSync(hooksJson)) {
+      convertHooksJson(hooksJson, src, register, uniqueLeaf, warnings);
+    }
 
     const inline = typeof plugin.mcpServers === "object" ? plugin.mcpServers : undefined;
     if (inline) convertMcpServers(inline, src, register, uniqueLeaf, warnings);
@@ -209,7 +227,8 @@ function writeArtifactMd(destDir: string, marker: string, fm: Record<string, unk
  * If a command's leading program is `${CLAUDE_PLUGIN_ROOT}/<relpath>`, copy that
  * file/dir from the checkout into `destDir/<relpath>` (preserving structure + exec
  * bit) and return the command rewritten to `./<relpath>`. Literal programs pass
- * through unchanged. Warns when the command has additional plugin-root refs in args.
+ * through unchanged. Refuses relpaths that escape the plugin root (path traversal)
+ * and warns honestly about unresolvable `${CLAUDE_PLUGIN_ROOT}` refs in arguments.
  */
 function convertCommand(
   command: string,
@@ -221,17 +240,35 @@ function convertCommand(
   const trimmed = command.trimStart();
   const m = trimmed.match(PLUGIN_ROOT_RE);
   const rest = trimmed.replace(/^\S+/, "").trimStart();
-  if (rest.includes("${CLAUDE_PLUGIN_ROOT}")) {
+  const argHasPlaceholder = rest.includes("${CLAUDE_PLUGIN_ROOT}");
+  if (!m) {
+    if (argHasPlaceholder) {
+      warnings.push(
+        `${what}: command references \${CLAUDE_PLUGIN_ROOT} but does not start with it; left unconverted, will not resolve at runtime — review`,
+      );
+    }
+    return command;
+  }
+  const rel = m[1]!;
+  if (
+    isAbsolute(rel) ||
+    !isWithin(srcRoot, join(srcRoot, rel)) ||
+    !isWithin(destDir, join(destDir, rel))
+  ) {
     warnings.push(
-      `${what}: command references \${CLAUDE_PLUGIN_ROOT} in arguments — converted best-effort, review it`,
+      `${what}: refuses \${CLAUDE_PLUGIN_ROOT}/${rel} — path escapes the plugin root; left unconverted`,
+    );
+    return command;
+  }
+  if (argHasPlaceholder) {
+    warnings.push(
+      `${what}: leading program converted; a \${CLAUDE_PLUGIN_ROOT} reference remains in arguments and will not resolve at runtime — review`,
     );
   }
-  if (!m) return command;
-  const rel = m[1]!;
   const from = join(srcRoot, rel);
   if (existsSync(from)) {
     const to = join(destDir, rel);
-    mkdirSync(join(to, ".."), { recursive: true });
+    mkdirSync(dirname(to), { recursive: true });
     cpSync(from, to, { recursive: true, dereference: true });
   } else {
     warnings.push(`${what}: \${CLAUDE_PLUGIN_ROOT}/${rel} not found in the repo`);
@@ -345,11 +382,19 @@ function indexNormalized(dir: string): IndexedArtifact[] {
  * instead of re-normalizing. Stages into a temp dir and renames into place so
  * concurrent callers racing on the same hash converge on one winner.
  */
+const WARNINGS_SIDECAR = ".umbel-normalize.json";
+
 export function ensureNormalized(checkoutDir: string, storeRoot: string): EnsureNormalizedResult {
   const hash = hashTree(checkoutDir);
   const finalDir = join(storeRoot, "derived", hash);
   if (existsSync(finalDir)) {
-    return { dir: finalDir, artifacts: indexNormalized(finalDir), warnings: [] };
+    let warnings: string[] = [];
+    try {
+      warnings = JSON.parse(readFileSync(join(finalDir, WARNINGS_SIDECAR), "utf8")).warnings ?? [];
+    } catch {
+      // Missing or stale sidecar → no persisted warnings to replay.
+    }
+    return { dir: finalDir, artifacts: indexNormalized(finalDir), warnings };
   }
   mkdirSync(join(storeRoot, "derived"), { recursive: true });
   const staging = join(
@@ -359,6 +404,7 @@ export function ensureNormalized(checkoutDir: string, storeRoot: string): Ensure
   );
   try {
     const { warnings } = normalizeRepo(checkoutDir, staging);
+    writeFileSync(join(staging, WARNINGS_SIDECAR), JSON.stringify({ warnings }));
     if (!existsSync(finalDir)) {
       try {
         renameSync(staging, finalDir);

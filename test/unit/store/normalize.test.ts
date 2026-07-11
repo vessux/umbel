@@ -275,4 +275,138 @@ describe("ensureNormalized", () => {
     expect(r2.dir).toBe(r1.dir);
     expect(r2.artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["skills/s"]);
   });
+
+  it("replays conversion warnings on a cache hit", () => {
+    writeFile(join(checkout, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(join(checkout, "commands/do.md"), "---\nname: do\n---\n");
+    const r1 = ensureNormalized(checkout, store);
+    expect(r1.warnings.join(" ")).toMatch(/command/i);
+    const r2 = ensureNormalized(checkout, store);
+    expect(r2.dir).toBe(r1.dir);
+    expect(r2.warnings).toEqual(r1.warnings);
+    expect(r2.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe("normalizeRepo — hooks.json conversion (branches)", () => {
+  let src: string;
+  let dest: string;
+  beforeEach(() => {
+    src = makeTmpDir("umbel-src-");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(src);
+    cleanup(dest);
+  });
+
+  it("disambiguates two hooks under one event+matcher (both kept)", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(src, "hooks/hooks.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              matcher: "",
+              hooks: [
+                { type: "command", command: "echo a" },
+                { type: "command", command: "echo b" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    const { artifacts } = normalizeRepo(src, dest);
+    const hooks = artifacts.filter((a) => a.kind === "hooks");
+    expect(hooks).toHaveLength(2);
+    expect(new Set(hooks.map((h) => h.leaf)).size).toBe(2);
+    for (const h of hooks) expect(existsSync(join(h.dir, "HOOK.md"))).toBe(true);
+  });
+
+  it("honors a custom plugin.hooks dir path", () => {
+    writeFile(
+      join(src, ".claude-plugin/plugin.json"),
+      JSON.stringify({ name: "kit", hooks: "cfg" }),
+    );
+    writeFile(
+      join(src, "cfg/hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ matcher: "", hooks: [{ type: "command", command: "echo x" }] }] },
+      }),
+    );
+    const { artifacts } = normalizeRepo(src, dest);
+    expect(artifacts.filter((a) => a.kind === "hooks")).toHaveLength(1);
+  });
+
+  it("warns honestly when a literal-led command carries a plugin-root arg", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(src, "hooks/hooks.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              matcher: "",
+              hooks: [{ type: "command", command: "bash ${CLAUDE_PLUGIN_ROOT}/x.sh" }],
+            },
+          ],
+        },
+      }),
+    );
+    const { warnings } = normalizeRepo(src, dest);
+    expect(warnings.join(" ")).toMatch(/does not start with it/);
+  });
+});
+
+describe("normalizeRepo — path containment", () => {
+  let outer: string;
+  let checkout: string;
+  let dest: string;
+  beforeEach(() => {
+    outer = makeTmpDir("umbel-outer-");
+    checkout = join(outer, "repo");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(outer);
+    cleanup(dest);
+  });
+
+  it("refuses a ${CLAUDE_PLUGIN_ROOT}/../ traversal in a hook command", () => {
+    writeFile(join(outer, "escape.sh"), "#!/bin/sh\necho pwned\n");
+    writeFile(join(checkout, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(
+      join(checkout, "hooks/hooks.json"),
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              matcher: "",
+              hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/../escape.sh" }],
+            },
+          ],
+        },
+      }),
+    );
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    const hook = artifacts.find((a) => a.kind === "hooks")!;
+    const md = readFileSync(join(hook.dir, "HOOK.md"), "utf8");
+    expect(md).toContain("${CLAUDE_PLUGIN_ROOT}");
+    expect(existsSync(join(hook.dir, "escape.sh"))).toBe(false);
+    expect(existsSync(join(dest, "hooks/escape.sh"))).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses a plugin.agents path that escapes the repo", () => {
+    writeFile(join(outer, "evil/secret.md"), "---\nname: secret\n---\n");
+    writeFile(
+      join(checkout, ".claude-plugin/plugin.json"),
+      JSON.stringify({ name: "kit", agents: "../evil" }),
+    );
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "agents")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
 });
