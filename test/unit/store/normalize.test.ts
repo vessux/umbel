@@ -43,3 +43,35 @@ describe("normalizeRepo — skills", () => {
     expect(artifacts).toEqual([]);
   });
 });
+
+describe("normalizeRepo — all kinds + framework", () => {
+  let src: string;
+  let dest: string;
+  beforeEach(() => {
+    src = makeTmpDir("umbel-src-");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(src);
+    cleanup(dest);
+  });
+
+  it("indexes agents/, hooks/, mcps/ trees alongside skills/", () => {
+    writeFile(join(src, "skills/s/SKILL.md"), "---\nname: s\n---\n");
+    writeFile(join(src, "agents/a/AGENT.md"), "---\nname: a\n---\n");
+    writeFile(
+      join(src, "hooks/h/HOOK.md"),
+      '---\nname: h\nevent: Stop\nmatcher: ""\ncommand: ./x.sh\n---\n',
+    );
+    writeFile(join(src, "hooks/h/x.sh"), "echo\n");
+    writeFile(join(src, "mcps/m/MCP.md"), "---\nname: m\ncommand: ./srv\n---\n");
+    const { artifacts } = normalizeRepo(src, dest);
+    expect(artifacts.map((a) => `${a.kind}/${a.leaf}`).sort()).toEqual([
+      "agents/a",
+      "hooks/h",
+      "mcps/m",
+      "skills/s",
+    ]);
+    expect(existsSync(join(dest, "hooks/h/x.sh"))).toBe(true);
+  });
+});
