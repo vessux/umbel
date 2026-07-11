@@ -72,8 +72,8 @@ export function loadBundleIndex(env: NodeJS.ProcessEnv, cwd: string): BundleInde
 /**
  * Look up `name` in the bundle index, compose it (extends), and resolve its
  * sources. Throws NotFoundError when the bundle isn't in the index. Used by
- * `bundle build`, `bundle show`, and `bundle run` so they share the same
- * compose+resolve pipeline.
+ * `bundle build`, `bundle show`, `bundle run`, and `pack` so they share the
+ * same compose+resolve pipeline.
  */
 export function resolveBundle(
   name: string,
