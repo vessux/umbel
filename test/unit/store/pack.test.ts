@@ -77,4 +77,21 @@ describe("runPack", () => {
     mkdirSync(out, { recursive: true });
     await expect(runPack(["dev", "--out", out], env, cwd)).rejects.toThrow(ConflictError);
   });
+
+  it("carries the authoring bundle.md + lock under .umbel/ (verbatim)", async () => {
+    writeFile(join(root, "config/bundles/dev.lock"), '{"version":1,"deps":{}}\n');
+    const out = join(root, "out");
+    await runPack(["dev", "--out", out], env, cwd);
+    expect(readFileSync(join(out, ".umbel/bundle.md"), "utf8")).toBe(
+      readFileSync(join(root, "config/bundles/dev.md"), "utf8"),
+    );
+    expect(readFileSync(join(out, ".umbel/dev.lock"), "utf8")).toBe('{"version":1,"deps":{}}\n');
+  });
+
+  it("omits .umbel/<name>.lock when the source has no lock", async () => {
+    const out = join(root, "out");
+    await runPack(["dev", "--out", out], env, cwd);
+    expect(existsSync(join(out, ".umbel/bundle.md"))).toBe(true);
+    expect(existsSync(join(out, ".umbel/dev.lock"))).toBe(false);
+  });
 });

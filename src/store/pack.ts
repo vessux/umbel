@@ -1,12 +1,13 @@
-import { existsSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { emitPluginLayout } from "../bundle/compile.ts";
 import { loadBundleIndex, resolveBundle } from "../bundle/exec.ts";
 import { hashBundle } from "../bundle/hash.ts";
 import { findProjectRoot } from "../bundle/pin.ts";
 import { ConflictError, UsageError } from "../errors.ts";
 import { isInteractive } from "../tty.ts";
+import { lockPathFor } from "./lock.ts";
 import { resolveTarget, resolveTargetOrPick } from "./target.ts";
 
 export async function runPack(
@@ -41,6 +42,14 @@ export async function runPack(
     mcpCommandBase: (canonical) => `\${CLAUDE_PLUGIN_ROOT}/mcps/${canonical}`,
     emitSettings: false,
   });
+
+  const umbelDir = join(partial, ".umbel");
+  mkdirSync(umbelDir, { recursive: true });
+  writeFileSync(join(umbelDir, "bundle.md"), readFileSync(entry.path, "utf8"));
+  const srcLock = lockPathFor(entry.path);
+  if (existsSync(srcLock)) {
+    writeFileSync(join(umbelDir, `${entry.name}.lock`), readFileSync(srcLock, "utf8"));
+  }
 
   renameSync(partial, outDir);
   process.stdout.write(`packed '${entry.name}' → ${outDir}\n`);
