@@ -36,6 +36,7 @@ import { CliError } from "./errors.ts";
 import { installShim, uninstallShim } from "./shim/install.ts";
 import { runAdd } from "./store/add.ts";
 import { runFork } from "./store/fork.ts";
+import { runImport } from "./store/import.ts";
 import { runInstall } from "./store/install.ts";
 import { runPack } from "./store/pack.ts";
 import { runRemove } from "./store/remove.ts";
@@ -103,6 +104,7 @@ async function runBundleVerb(
   if (verb === "remove") return runRemove(rest, env, cwd);
   if (verb === "fork") return runFork(rest, env, cwd);
   if (verb === "pack") return runPack(rest, env, cwd);
+  if (verb === "import") return runImport(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
   if (verb === "edit") return runBundleEdit(rest, env, cwd);

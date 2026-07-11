@@ -16,6 +16,7 @@ Bundle verbs:
   umbel remove <alias> | <alias>/<leaf> [--bundle <name>]  Drop a dependency (+ its refs & lock) or one composed artifact.
   umbel fork [newname] [--bundle <src>]  Copy a bundle into the current project to diverge (project scope).
   umbel pack [name] [--out <dir>]     Emit a self-contained plugin dir (runs under plain claude --plugin-dir).
+  umbel import <dir> [name] [--yes]   Re-hydrate a packed/plugin dir into a new user-scope bundle.
   umbel init                          Multi-step wizard to author a bundle.
   umbel gc                            Prune cache (keep newest 3 per name).
   umbel shim install [--force]        Install the PATH shim (~/.local/share/umbel/bin/claude).
@@ -53,6 +54,7 @@ export const BUNDLE_VERBS = new Set([
   "remove",
   "fork",
   "pack",
+  "import",
   "apply",
   "unpin",
   "list",
