@@ -49,8 +49,15 @@ describe("pack → import round-trip", () => {
     writeFile(join(root, "a/skills/src/greet/SKILL.md"), "---\nname: greet\n---\nhello\n");
     writeFile(join(root, "a/agents/src/helper/AGENT.md"), "---\nname: helper\n---\nagent body\n");
     writeFile(
+      join(root, "a/hooks/src/logit/HOOK.md"),
+      "---\nname: logit\nevent: PreToolUse\nmatcher: Bash\ncommand: ./run.sh\n---\n",
+    );
+    writeFile(join(root, "a/hooks/src/logit/run.sh"), "#!/bin/sh\necho hi\n");
+    writeFile(join(root, "a/mcps/src/db/MCP.md"), "---\nname: db\ncommand: ./serve\n---\n");
+    writeFile(join(root, "a/mcps/src/db/serve"), "#!/bin/sh\necho serve\n");
+    writeFile(
       join(root, "a/bundles/dev.md"),
-      "---\nname: dev\ndescription: d\nskills:\n  - src/greet\nagents:\n  - src/helper\n---\n",
+      "---\nname: dev\ndescription: d\nskills:\n  - src/greet\nagents:\n  - src/helper\nhooks:\n  - src/logit\nmcps:\n  - src/db\n---\n",
     );
   });
   afterEach(() => cleanup(root));
@@ -73,10 +80,16 @@ describe("pack → import round-trip", () => {
       UMBEL_DATA_DIR: join(root, "b-data"),
       UMBEL_CACHE_DIR: join(root, "b-cache"),
     };
-    await runImport([out, "dev"], envB, cwd);
+    await runImport([out, "dev", "--yes"], envB, cwd);
     const reimported = compiledArtifacts(buildOnce(envB, cwd, "dev"));
 
     expect(reimported).toEqual(original);
+    expect(Object.keys(original).sort()).toEqual([
+      "agents/helper",
+      "hooks/logit",
+      "mcps/db",
+      "skills/greet",
+    ]);
   });
 
   it("imports a plain (non-umbel) plugin dir into a usable bundle (AC4)", async () => {

@@ -827,6 +827,9 @@ the artifact pool under a source namespace = the bundle name, and mints a `bundl
 bare `<name>/<leaf>` refs (no `deps:`, no lock). Hook/MCP content passes the trust gate
 (ADR-0014; `--yes` overrides, non-TTY fails closed, exit 5). Name defaults from a carried
 `.umbel/bundle.md`, else `plugin.json`, else the dir basename; a taken name is a conflict.
+Import recognizes umbel-shaped artifact dirs (`<kind>/<leaf>/` with a `SKILL.md`/`AGENT.md`/`HOOK.md`/`MCP.md`);
+a plain plugin's CC-native `hooks/hooks.json` or inline `plugin.json` MCP servers are not
+converted (deferred to #55) — its skills/agents still import.
 
 For a **reproducible** restore of a packed bundle (github deps re-pinned), copy
 `.umbel/bundle.md` + `.umbel/<name>.lock` into `~/.config/umbel/bundles/` and run
