@@ -49,6 +49,32 @@ export function resolveBranchTip(opts: {
   return null;
 }
 
+/**
+ * The default branch of a remote (the branch HEAD points at). A bare
+ * `try`/`adopt` URL carries no ref, so we resolve it here via `ls-remote --symref`
+ * before cloning `--branch <it>`. Throws NotFoundError when the remote is
+ * unreachable or reports no symbolic HEAD.
+ */
+export function resolveDefaultBranch(url: string): string {
+  const r = spawnSync("git", ["ls-remote", "--symref", url, "HEAD"], {
+    encoding: "utf8",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  if (r.error && (r.error as NodeJS.ErrnoException).code === "ENOENT") {
+    throw new CliError("umbel: 'git' not found on PATH", 1);
+  }
+  if (r.status !== 0) {
+    const detail = (r.stderr ?? "").trim().split("\n").slice(0, 3).join("\n");
+    throw new NotFoundError(`failed to reach ${url}:\n${detail}`);
+  }
+  for (const line of r.stdout.split("\n")) {
+    // `ref: refs/heads/<branch>\tHEAD`
+    const m = line.match(/^ref:\s+refs\/heads\/(\S+)\s+HEAD$/);
+    if (m) return m[1]!;
+  }
+  throw new NotFoundError(`${url}: could not determine a default branch`);
+}
+
 export function ensureCheckout(opts: EnsureOpts): Checkout {
   // link:/local deps are live (never fetched or staked); only github reaches here.
   const { coord } = opts;
