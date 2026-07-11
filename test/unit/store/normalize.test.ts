@@ -75,3 +75,36 @@ describe("normalizeRepo — all kinds + framework", () => {
     expect(existsSync(join(dest, "hooks/h/x.sh"))).toBe(true);
   });
 });
+
+describe("normalizeRepo — .claude-plugin layout", () => {
+  let src: string;
+  let dest: string;
+  beforeEach(() => {
+    src = makeTmpDir("umbel-src-");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(src);
+    cleanup(dest);
+  });
+
+  it("wraps a CC agent .md file into agents/<name>/AGENT.md", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(join(src, "skills/s/SKILL.md"), "---\nname: s\n---\n");
+    writeFile(join(src, "agents/reviewer.md"), "---\nname: reviewer\ndescription: r\n---\nbody\n");
+    const { artifacts } = normalizeRepo(src, dest);
+    expect(artifacts.map((a) => `${a.kind}/${a.leaf}`).sort()).toEqual([
+      "agents/reviewer",
+      "skills/s",
+    ]);
+    expect(readFileSync(join(dest, "agents/reviewer/AGENT.md"), "utf8")).toContain("reviewer");
+  });
+
+  it("skips commands/*.md with a warning", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    writeFile(join(src, "commands/do.md"), "---\nname: do\n---\n");
+    const { artifacts, warnings } = normalizeRepo(src, dest);
+    expect(artifacts).toEqual([]);
+    expect(warnings.join(" ")).toMatch(/command/i);
+  });
+});

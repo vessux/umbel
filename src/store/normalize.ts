@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { ARTIFACT_KINDS, type ArtifactKind } from "../bundle/kinds.ts";
 import { readFrontmatter } from "../source/frontmatter.ts";
@@ -78,6 +78,15 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     }
   }
 
+  const plugin = readPluginJson(src);
+  if (plugin !== null) {
+    indexPluginAgents(join(src, plugin.agents ?? "agents"), register);
+    if (existsSync(join(src, plugin.commands ?? "commands"))) {
+      warnings.push("commands/ present — umbel has no 'commands' kind; skipped");
+    }
+    // hooks + mcps converters are wired in a LATER task.
+  }
+
   void uniqueLeaf; // wired to the converters in a later task
 
   artifacts.sort((a, b) =>
@@ -119,5 +128,37 @@ function indexUmbelShaped(
     for (const kind of ARTIFACT_KINDS) {
       if (existsSync(join(dir, MARKERS[kind]))) place(kind, leaf, dir);
     }
+  }
+}
+
+interface PluginJson {
+  agents?: string;
+  hooks?: string;
+  mcpServers?: string | Record<string, Record<string, unknown>>;
+  commands?: string;
+}
+
+function readPluginJson(src: string): PluginJson | null {
+  const p = join(src, ".claude-plugin", "plugin.json");
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) as PluginJson;
+  } catch {
+    return null;
+  }
+}
+
+// Convert CC agent .md FILES under agentsDir into agents/<name>/AGENT.md dirs.
+function indexPluginAgents(
+  agentsDir: string,
+  register: (k: ArtifactKind, leaf: string) => string | null,
+): void {
+  if (!isDir(agentsDir)) return;
+  for (const name of readdirSync(agentsDir).sort()) {
+    if (!name.endsWith(".md")) continue;
+    const dir = register("agents", name.slice(0, -3));
+    if (dir === null) continue;
+    mkdirSync(dir, { recursive: true });
+    cpSync(join(agentsDir, name), join(dir, "AGENT.md"), { dereference: true });
   }
 }
