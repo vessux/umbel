@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ConflictError, UsageError } from "../../../src/errors.ts";
+import { ConflictError, TrustError, UsageError } from "../../../src/errors.ts";
 import { runImport } from "../../../src/store/import.ts";
 import { cleanup, makeTmpDir, writeFile } from "../../helpers/tmp.ts";
 
@@ -97,12 +97,40 @@ describe("runImport", () => {
     writeFile(join(dir, "hooks/logit/run.sh"), "#!/bin/sh\n");
     writeFile(join(dir, "mcps/db/MCP.md"), "---\nname: db\ncommand: ./serve\n---\n");
     writeFile(join(dir, "mcps/db/serve"), "#!/bin/sh\n");
-    await runImport([dir, "--yes"], env, cwd); // --yes is a harmless no-op now; needed once the trust gate lands (Task 6)
+    await runImport([dir, "--yes"], env, cwd);
     const md = readFileSync(join(root, "config/bundles/dev.md"), "utf8");
     expect(md).toMatch(/- dev\/logit/);
     expect(md).toMatch(/- dev\/db/);
     expect(existsSync(join(root, "config/hooks/dev/logit/HOOK.md"))).toBe(true);
     expect(existsSync(join(root, "config/mcps/dev/db/serve"))).toBe(true);
+  });
+
+  it("fails closed (exit 5 / TrustError) on a non-TTY when the plugin ships hook/MCP content", async () => {
+    const dir = join(root, "plugin");
+    makePluginDir(dir);
+    writeFile(
+      join(dir, "hooks/logit/HOOK.md"),
+      "---\nname: logit\nevent: PreToolUse\nmatcher: Bash\ncommand: ./run.sh\n---\n",
+    );
+    writeFile(join(dir, "hooks/logit/run.sh"), "#!/bin/sh\necho hi\n");
+    // env is NO_TTY → gate fails closed; nothing should be written.
+    await expect(runImport([dir], env, cwd)).rejects.toThrow(TrustError);
+    expect(existsSync(join(root, "config/bundles/dev.md"))).toBe(false);
+    expect(existsSync(join(root, "config/hooks/dev/logit"))).toBe(false);
+  });
+
+  it("--yes trusts hook/MCP content on a non-TTY", async () => {
+    const dir = join(root, "plugin");
+    makePluginDir(dir);
+    writeFile(
+      join(dir, "hooks/logit/HOOK.md"),
+      "---\nname: logit\nevent: PreToolUse\nmatcher: Bash\ncommand: ./run.sh\n---\n",
+    );
+    writeFile(join(dir, "hooks/logit/run.sh"), "#!/bin/sh\necho hi\n");
+    const code = await runImport([dir, "--yes"], env, cwd);
+    expect(code).toBe(0);
+    expect(existsSync(join(root, "config/hooks/dev/logit/HOOK.md"))).toBe(true);
+    expect(readFileSync(join(root, "config/bundles/dev.md"), "utf8")).toMatch(/- dev\/logit/);
   });
 
   it("errors on a present but corrupt .umbel/bundle.md", async () => {

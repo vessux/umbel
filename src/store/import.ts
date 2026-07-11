@@ -13,6 +13,9 @@ import { artifactRoots, userBundlesDir } from "../bundle/env.ts";
 import { ARTIFACT_KINDS, type ArtifactKind } from "../bundle/kinds.ts";
 import { type BundleSettings, NAME_RE, loadManifest } from "../bundle/manifest.ts";
 import { ConflictError, NotFoundError, UsageError } from "../errors.ts";
+import { isInteractive } from "../tty.ts";
+import { confirmExecTrust } from "../ui/prompt.ts";
+import { gateTrust, planTrust } from "./trust.ts";
 
 const MARKERS: Record<ArtifactKind, string> = {
   skills: "SKILL.md",
@@ -32,7 +35,7 @@ export async function runImport(
   env: NodeJS.ProcessEnv,
   cwd: string,
 ): Promise<number> {
-  const { dirArg: parsedDirArg, nameArg } = parseImportArgs(rest);
+  const { dirArg: parsedDirArg, nameArg, yes } = parseImportArgs(rest);
   const dirArg = resolve(cwd, parsedDirArg);
   if (!existsSync(dirArg)) {
     throw new NotFoundError(`umbel import: no such directory: ${dirArg}`);
@@ -75,6 +78,16 @@ export async function runImport(
   const refs: Record<ArtifactKind, string[]> = { skills: [], agents: [], hooks: [], mcps: [] };
   for (const a of artifacts) refs[a.kind].push(`${name}/${a.leaf}`);
   const description = umbelMeta?.description ?? pluginJson.description;
+
+  // Trust gate (ADR-0014): confirm new hook/MCP content before writing anything.
+  await gateTrust({
+    changes: planTrust(null, dirArg),
+    interactive: isInteractive(env),
+    yes,
+    confirm: confirmExecTrust,
+    write: (s) => process.stderr.write(s),
+    what: `plugin '${name}' (import)`,
+  });
 
   // Atomic: the conflict checks proved none of these paths pre-existed, so on any
   // failure mid-copy we can safely remove everything we created — otherwise a
@@ -169,7 +182,7 @@ function renderImportedManifest(fields: {
   return `---\n${stringify(fm, { lineWidth: 0 })}---\n`;
 }
 
-function parseImportArgs(rest: string[]): { dirArg: string; nameArg?: string } {
+function parseImportArgs(rest: string[]): { dirArg: string; nameArg?: string; yes: boolean } {
   const positionals: string[] = [];
   let yes = false;
   for (const a of rest) {
@@ -177,10 +190,9 @@ function parseImportArgs(rest: string[]): { dirArg: string; nameArg?: string } {
     else if (a.startsWith("-")) throw new UsageError(`umbel import: unknown flag: ${a}`);
     else positionals.push(a);
   }
-  void yes; // consumed by the trust gate in the next task
   const [dirArg, nameArg, extra] = positionals;
   if (dirArg === undefined)
     throw new UsageError("umbel import: directory required (umbel import <dir> [name])");
   if (extra !== undefined) throw new UsageError(`umbel import: unexpected argument: ${extra}`);
-  return { dirArg, ...(nameArg !== undefined ? { nameArg } : {}) };
+  return { dirArg, yes, ...(nameArg !== undefined ? { nameArg } : {}) };
 }
