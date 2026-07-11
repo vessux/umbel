@@ -710,6 +710,8 @@ project's own `.mcp.json` is additive rather than hidden.
 
 ```
 umbel run    [<name>] [--no-cache] [-- ...args]   # exec claude
+umbel try    <url> [--yes] [-- ...args]           # fetch + compose everything + launch ephemerally
+umbel adopt  <url> [<name>] [--yes]               # create a bundle mirroring one source (pool-copy)
 umbel apply  [<name>] [--vanilla]                 # write pin + warm cache (--vanilla = pin "no bundle")
 umbel unpin                                       # remove pin
 umbel remove <alias> | <alias>/<leaf> [--bundle]  # drop a dependency or one artifact
@@ -828,12 +830,51 @@ bare `<name>/<leaf>` refs (no `deps:`, no lock). Hook/MCP content passes the tru
 (ADR-0014; `--yes` overrides, non-TTY fails closed, exit 5). Name defaults from a carried
 `.umbel/bundle.md`, else `plugin.json`, else the dir basename; a taken name is a conflict.
 Import recognizes umbel-shaped artifact dirs (`<kind>/<leaf>/` with a `SKILL.md`/`AGENT.md`/`HOOK.md`/`MCP.md`);
-a plain plugin's CC-native `hooks/hooks.json` or inline `plugin.json` MCP servers are not
-converted (deferred to #55) — its skills/agents still import.
+`import` itself does not convert a plain plugin's CC-native `hooks/hooks.json` or inline
+`plugin.json` MCP servers — its skills/agents still import, while `umbel adopt <url>` (below) is
+the path that fully converts CC-native executable config through the normalizer.
 
 For a **reproducible** restore of a packed bundle (github deps re-pinned), copy
 `.umbel/bundle.md` + `.umbel/<name>.lock` into `~/.config/umbel/bundles/` and run
 `umbel install --frozen <name>` — the existing thin-share path.
+
+### `umbel try` / `umbel adopt`
+
+The "found it on GitHub, use it now" verbs. Both accept a **bare GitHub URL**
+(`https://github.com/<org>/<repo>`, also `…/tree/<ref>` and the `github:<org>/<repo>[@<ref>]`
+coordinate); with no ref, the repo's **default branch** is resolved (`git ls-remote --symref
+HEAD`). A single **normalizer** auto-detects the repo's shape across four layouts — a lone
+`SKILL.md`, kind trees (`skills/`·`agents/`·`hooks/`·`mcps/`), a repo of `<leaf>/<MARKER>` dirs,
+and a `.claude-plugin/` (honouring `plugin.json` component paths) — and **converts CC-native
+executable config** into umbel artifacts: `hooks/hooks.json` → one `HOOK.md` per command entry,
+inline `plugin.json.mcpServers` / a root `.mcp.json` → one `MCP.md` per server, a CC agent `.md`
+file → an `agents/<name>/AGENT.md` dir. A converted `${CLAUDE_PLUGIN_ROOT}/<script>` command
+copies the script into the artifact dir and re-points the command at it (`./<script>`); literal
+commands pass through. `commands/*.md` are skipped (umbel has no `commands` kind). Any path — a
+`..`/absolute reference or a symlink — that escapes the fetched checkout is **refused**, so the
+normalizer only ever ingests bytes from inside the repo and the derived tree stays a pure
+function of the checkout (keeping builds reproducible).
+
+`umbel try <url> [--yes] [-- ...args]` fetches, composes **everything** found, and launches the
+harness **ephemerally** — it writes no pin, manifest, or lock (only the store checkout, a
+content-addressed `derived/` tree, and the compiled cache are warmed, all GC-able). The trust
+gate (ADR-0014) fires only when the repo ships hooks/MCPs (including converted CC-native ones):
+a skill-only repo launches prompt-free, an executable-carrying one shows the diff first; a
+non-interactive run fails closed (exit 5, `--yes` overrides).
+
+`umbel adopt <url> [<name>] [--yes]` **creates** a new user-scope bundle mirroring one source. It
+copies the normalized artifacts into the pool under a namespace = the bundle name and mints a
+`bundle.md` of bare `<name>/<leaf>` refs (like `import`, **not** `deps:`/lock — authoring owns
+that path), with an `adopted-from: <coord> (<commit>)` provenance comment; `apply` + `run` then
+work immediately. The name defaults to the repo name; a taken name is a conflict (exit 4).
+Hook/MCP content passes the trust gate.
+
+> **`try` runs untrusted third-party code.** It composes and launches whatever an unvetted repo
+> contains. Approving the trust diff does **not** make it safe — a `SKILL.md` can prescribe
+> running code the gate never sees (skill/agent prompt-injection is an explicit v1 non-goal,
+> ADR-0014). **Sandbox an untrusted `try`** — a container, a throwaway VM, or restricted
+> credentials — that is the user's responsibility. `try`'s value over a global plugin install is
+> that it leaves no persistent state to clean up, not that it is safe.
 
 ## Risks acknowledged
 
