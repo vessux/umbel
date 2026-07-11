@@ -107,4 +107,51 @@ describe("normalizeRepo — .claude-plugin layout", () => {
     expect(artifacts).toEqual([]);
     expect(warnings.join(" ")).toMatch(/command/i);
   });
+
+  it("honors a custom plugin.agents path", () => {
+    writeFile(
+      join(src, ".claude-plugin/plugin.json"),
+      JSON.stringify({ name: "kit", agents: "assistants" }),
+    );
+    writeFile(join(src, "assistants/rev.md"), "---\nname: rev\n---\n");
+    const { artifacts } = normalizeRepo(src, dest);
+    expect(artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["agents/rev"]);
+    expect(existsSync(join(dest, "agents/rev/AGENT.md"))).toBe(true);
+  });
+
+  it("warns and skips the plugin layout when plugin.json is malformed", () => {
+    writeFile(join(src, ".claude-plugin/plugin.json"), "{ not json");
+    writeFile(join(src, "agents/reviewer.md"), "---\nname: reviewer\n---\n");
+    const { artifacts, warnings } = normalizeRepo(src, dest);
+    expect(artifacts).toEqual([]);
+    expect(warnings.join(" ")).toMatch(/malformed/i);
+  });
+});
+
+describe("normalizeRepo — edge branches", () => {
+  let src: string;
+  let dest: string;
+  beforeEach(() => {
+    src = makeTmpDir("umbel-src-");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(src);
+    cleanup(dest);
+  });
+
+  it("dedups a skills/ tree entry against a root repo-of-dirs of the same leaf", () => {
+    writeFile(join(src, "skills/greet/SKILL.md"), "---\nname: greet\n---\ntree\n");
+    writeFile(join(src, "greet/SKILL.md"), "---\nname: greet\n---\nroot\n");
+    const { artifacts, warnings } = normalizeRepo(src, dest);
+    expect(artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["skills/greet"]);
+    expect(warnings.join(" ")).toMatch(/duplicate/);
+  });
+
+  it("falls back to the repo basename for a lone SKILL.md with no name field", () => {
+    const repo = join(src, "myrepo");
+    writeFile(join(repo, "SKILL.md"), "---\ndescription: d\n---\nx\n");
+    const { artifacts } = normalizeRepo(repo, dest);
+    expect(artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["skills/myrepo"]);
+  });
 });

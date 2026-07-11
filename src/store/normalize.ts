@@ -78,7 +78,7 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     }
   }
 
-  const plugin = readPluginJson(src);
+  const plugin = readPluginJson(src, warnings);
   if (plugin !== null) {
     indexPluginAgents(join(src, plugin.agents ?? "agents"), register);
     if (existsSync(join(src, plugin.commands ?? "commands"))) {
@@ -138,12 +138,13 @@ interface PluginJson {
   commands?: string;
 }
 
-function readPluginJson(src: string): PluginJson | null {
+function readPluginJson(src: string, warnings: string[]): PluginJson | null {
   const p = join(src, ".claude-plugin", "plugin.json");
   if (!existsSync(p)) return null;
   try {
     return JSON.parse(readFileSync(p, "utf8")) as PluginJson;
   } catch {
+    warnings.push("plugin.json malformed — skipping .claude-plugin layout");
     return null;
   }
 }
