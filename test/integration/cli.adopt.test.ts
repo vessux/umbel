@@ -57,9 +57,11 @@ describe("umbel adopt (integration)", () => {
     expect(readFileSync(join(cacheDir, "skills/greet/SKILL.md"), "utf8")).toContain("hello");
   });
 
-  it("a taken name is a conflict (exit 4)", () => {
+  it("a taken name is a conflict (exit 4), attributed to adopt not import", () => {
     const r = umbel("adopt", "https://github.com/acme/tools", "toolkit");
     expect(r.status).toBe(4);
+    expect(r.stderr).toMatch(/umbel adopt:/);
+    expect(r.stderr).not.toMatch(/import/);
   });
 
   it("derives the bundle name from the repo when none is given", () => {

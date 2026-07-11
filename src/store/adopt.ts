@@ -54,6 +54,7 @@ export async function runAdopt(
     yes,
     headerComment: `adopted-from: ${coord.raw} (${commit})`,
     what: `repo '${target.org}/${target.repo}' (adopt)`,
+    verb: "adopt",
   });
 
   process.stdout.write(`adopted '${name}' from ${coord.raw} (${commit})\n`);

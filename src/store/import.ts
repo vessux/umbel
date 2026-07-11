@@ -40,6 +40,8 @@ export interface ImportCoreOpts {
   mergeMcp?: boolean;
   headerComment?: string;
   what: string;
+  /** CLI verb for user-facing error prefixes (`import` or `adopt`). */
+  verb: string;
 }
 
 /**
@@ -51,7 +53,7 @@ export interface ImportCoreOpts {
 export async function importNormalizedDir(opts: ImportCoreOpts): Promise<IndexedArtifact[]> {
   const artifacts = indexArtifacts(opts.dir);
   if (artifacts.length === 0) {
-    throw new UsageError(`umbel import: no artifacts found under ${opts.dir}`);
+    throw new UsageError(`umbel ${opts.verb}: no artifacts found under ${opts.dir}`);
   }
 
   const roots = artifactRoots(opts.env);
@@ -60,7 +62,7 @@ export async function importNormalizedDir(opts: ImportCoreOpts): Promise<Indexed
     const poolDir = join(roots[kind], opts.name);
     if (existsSync(poolDir)) {
       throw new ConflictError(
-        `umbel import: '${opts.name}' already exists in the ${kind} pool at ${poolDir} (pass a different name)`,
+        `umbel ${opts.verb}: '${opts.name}' already exists in the ${kind} pool at ${poolDir} (pass a different name)`,
       );
     }
   }
@@ -108,7 +110,7 @@ export async function importNormalizedDir(opts: ImportCoreOpts): Promise<Indexed
       rmSync(join(roots[kind], opts.name), { recursive: true, force: true });
     if ((e as NodeJS.ErrnoException).code === "EEXIST") {
       throw new ConflictError(
-        `umbel import: bundle '${opts.name}' already exists at ${bundlePath}`,
+        `umbel ${opts.verb}: bundle '${opts.name}' already exists at ${bundlePath}`,
       );
     }
     // A non-EEXIST failure may have left a partial manifest we did create.
@@ -156,6 +158,7 @@ export async function runImport(
     ...(umbelMeta?.settings !== undefined ? { settings: umbelMeta.settings } : {}),
     ...(umbelMeta?.mergeMcp !== undefined ? { mergeMcp: umbelMeta.mergeMcp } : {}),
     what: `plugin '${name}' (import)`,
+    verb: "import",
   });
 
   const bundlePath = join(userBundlesDir(env), `${name}.md`);

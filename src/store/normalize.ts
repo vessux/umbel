@@ -87,8 +87,8 @@ function safeCopyInto(
 /**
  * Turn a repo checkout into an umbel-shaped artifact tree under `dest`
  * (`<dest>/<kind>/<leaf>/<MARKER>` + sidecars). Deterministic — a pure function
- * of the checkout bytes. Unions every layout that matches. Later tasks add the
- * `.claude-plugin/` converters (they reuse `register` and `uniqueLeaf`).
+ * of the checkout bytes. Unions every layout that matches, including the
+ * `.claude-plugin/` converters (which reuse `register` and `uniqueLeaf`).
  */
 export function normalizeRepo(src: string, dest: string): NormalizeResult {
   const seen = new Set<string>(); // `${kind}/${leaf}`
@@ -118,7 +118,7 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     mkdirSync(to, { recursive: true });
     safeCopyInto(fromDir, to, src, warnings, `${kind}/${leaf}`);
   }
-  const uniqueLeaf = makeUniqueLeaf(seen); // used by the converters in later tasks
+  const uniqueLeaf = makeUniqueLeaf(seen); // used by the CC-native converters below
 
   indexUmbelShaped(src, place);
 
