@@ -40,6 +40,7 @@ import { runImport } from "./store/import.ts";
 import { runInstall } from "./store/install.ts";
 import { runPack } from "./store/pack.ts";
 import { runRemove } from "./store/remove.ts";
+import { runTry } from "./store/try.ts";
 import { runOutdated, runUpdate } from "./store/update.ts";
 import { isInteractive } from "./tty.ts";
 import { runEditWizard, runInitWizard } from "./ui/bundle-init.ts";
@@ -105,6 +106,7 @@ async function runBundleVerb(
   if (verb === "fork") return runFork(rest, env, cwd);
   if (verb === "pack") return runPack(rest, env, cwd);
   if (verb === "import") return runImport(rest, env, cwd);
+  if (verb === "try") return runTry(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
   if (verb === "edit") return runBundleEdit(rest, env, cwd);

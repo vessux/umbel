@@ -85,4 +85,12 @@ describe("parseSubcommand", () => {
     const sub = parseSubcommand(["import", "./dir", "name"]);
     expect(sub).toEqual({ kind: "verb", verb: "import", rest: ["./dir", "name"] });
   });
+
+  it("recognizes try as a verb", () => {
+    expect(parseSubcommand(["try", "https://github.com/a/b"])).toEqual({
+      kind: "verb",
+      verb: "try",
+      rest: ["https://github.com/a/b"],
+    });
+  });
 });
