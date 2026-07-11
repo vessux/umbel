@@ -37,6 +37,7 @@ import { installShim, uninstallShim } from "./shim/install.ts";
 import { runAdd } from "./store/add.ts";
 import { runFork } from "./store/fork.ts";
 import { runInstall } from "./store/install.ts";
+import { runPack } from "./store/pack.ts";
 import { runRemove } from "./store/remove.ts";
 import { runOutdated, runUpdate } from "./store/update.ts";
 import { isInteractive } from "./tty.ts";
@@ -101,6 +102,7 @@ async function runBundleVerb(
   if (verb === "outdated") return runOutdated(rest, env, cwd);
   if (verb === "remove") return runRemove(rest, env, cwd);
   if (verb === "fork") return runFork(rest, env, cwd);
+  if (verb === "pack") return runPack(rest, env, cwd);
   if (verb === "gc") return runBundleGc(rest, env);
   if (verb === "shim") return runShim(rest, env);
   if (verb === "edit") return runBundleEdit(rest, env, cwd);
