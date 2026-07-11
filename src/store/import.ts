@@ -63,9 +63,6 @@ export async function runImport(
 
   const roots = artifactRoots(env);
   const bundlePath = join(userBundlesDir(env), `${name}.md`);
-  if (existsSync(bundlePath)) {
-    throw new ConflictError(`umbel import: bundle '${name}' already exists at ${bundlePath}`);
-  }
   for (const kind of ARTIFACT_KINDS) {
     const poolDir = join(roots[kind], name);
     if (existsSync(poolDir)) {
@@ -89,15 +86,19 @@ export async function runImport(
     what: `plugin '${name}' (import)`,
   });
 
-  // Atomic: the conflict checks proved none of these paths pre-existed, so on any
-  // failure mid-copy we can safely remove everything we created — otherwise a
-  // partial pool dir would block every future import of this name.
+  // Copy artifacts into the pool, then mint the manifest. The pool conflict
+  // checks proved those dirs didn't pre-exist, so on any failure we roll back
+  // everything we created — otherwise a partial pool dir would block every
+  // future import of this name.
   try {
     for (const a of artifacts) {
       const dest = join(roots[a.kind], name, a.leaf);
       cpSync(a.dir, dest, { recursive: true, dereference: true });
     }
     mkdirSync(userBundlesDir(env), { recursive: true });
+    // Exclusive create ('wx') atomically fails if the manifest already exists,
+    // rather than a check-then-write (a TOCTOU race); a pre-existing manifest is
+    // a conflict we surface without clobbering it.
     writeFileSync(
       bundlePath,
       renderImportedManifest({
@@ -107,10 +108,15 @@ export async function runImport(
         ...(umbelMeta?.settings !== undefined ? { settings: umbelMeta.settings } : {}),
         ...(umbelMeta?.mergeMcp !== undefined ? { mergeMcp: umbelMeta.mergeMcp } : {}),
       }),
+      { flag: "wx" },
     );
   } catch (e) {
     for (const kind of ARTIFACT_KINDS)
       rmSync(join(roots[kind], name), { recursive: true, force: true });
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new ConflictError(`umbel import: bundle '${name}' already exists at ${bundlePath}`);
+    }
+    // A non-EEXIST failure may have left a partial manifest we did create.
     rmSync(bundlePath, { force: true });
     throw e;
   }
