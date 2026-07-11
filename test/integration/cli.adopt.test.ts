@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -66,5 +66,59 @@ describe("umbel adopt (integration)", () => {
     const r = umbel("adopt", "github:acme/tools");
     expect(r.status).toBe(0);
     expect(existsSync(join(root, "config/bundles/tools.md"))).toBe(true);
+  });
+});
+
+describe("umbel adopt — .claude-plugin conversion", () => {
+  let root: string;
+  let env: NodeJS.ProcessEnv;
+  function umbel(...args: string[]) {
+    return spawnSync(process.execPath, [CLI, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, ...env, NO_TTY: "1" },
+      cwd: root,
+    });
+  }
+  beforeAll(() => {
+    root = makeTmpDir();
+    makeGitFixture(join(root, "gh/acme/plug"), {
+      ".claude-plugin/plugin.json": JSON.stringify({
+        name: "plug",
+        mcpServers: { db: { command: "npx", args: ["duckdb-mcp"] } },
+      }),
+      "skills/s/SKILL.md": "---\nname: s\ndescription: s\n---\ns\n",
+      "hooks/hooks.json": JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              matcher: "",
+              hooks: [{ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/scripts/x.sh" }],
+            },
+          ],
+        },
+      }),
+      "scripts/x.sh": "#!/bin/sh\necho x\n",
+    });
+    env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_ARTIFACTS_DIR: join(root, "config"),
+      UMBEL_DATA_DIR: join(root, "data"),
+      UMBEL_CACHE_DIR: join(root, "cache"),
+    };
+  });
+  afterAll(() => cleanup(root));
+
+  it("converts hooks.json + mcpServers, then compiles them into the plugin cache", () => {
+    const r = umbel("adopt", "github:acme/plug", "plug", "--yes");
+    expect(r.status).toBe(0);
+    expect(existsSync(join(root, "config/mcps/plug/db/MCP.md"))).toBe(true);
+    const hookLeaf = readdirSync(join(root, "config/hooks/plug"))[0];
+    expect(hookLeaf).toBeDefined();
+    expect(existsSync(join(root, "config/hooks/plug", hookLeaf!, "scripts/x.sh"))).toBe(true);
+    const b = umbel("build", "plug");
+    expect(b.status).toBe(0);
+    const cacheDir = b.stdout.trim().split("\n").pop()!;
+    expect(existsSync(join(cacheDir, "hooks/hooks.json"))).toBe(true);
+    expect(existsSync(join(cacheDir, ".mcp.json"))).toBe(true);
   });
 });
