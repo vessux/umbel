@@ -4,6 +4,8 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -11,6 +13,7 @@ import { basename, join } from "node:path";
 import { stringify as yamlStringify } from "yaml";
 import { ARTIFACT_KINDS, type ArtifactKind } from "../bundle/kinds.ts";
 import { readFrontmatter } from "../source/frontmatter.ts";
+import { hashTree } from "./content-hash.ts";
 
 export interface IndexedArtifact {
   kind: ArtifactKind;
@@ -310,5 +313,62 @@ function convertMcpServers(
     const rewritten = convertCommand(command, srcRoot, dir, warnings, `mcp ${name}`);
     const { command: _c, ...extras } = cfg;
     writeArtifactMd(dir, "MCP.md", { name, command: rewritten, ...extras });
+  }
+}
+
+export interface EnsureNormalizedResult {
+  dir: string;
+  artifacts: IndexedArtifact[];
+  warnings: string[];
+}
+
+// Index an already-materialized umbel-shaped derived dir (cache-hit path).
+function indexNormalized(dir: string): IndexedArtifact[] {
+  const out: IndexedArtifact[] = [];
+  for (const kind of ARTIFACT_KINDS) {
+    const base = join(dir, kind);
+    if (!isDir(base)) continue;
+    for (const leaf of readdirSync(base).sort()) {
+      if (existsSync(join(base, leaf, MARKERS[kind])))
+        out.push({ kind, leaf, dir: join(base, leaf) });
+    }
+  }
+  out.sort((a, b) =>
+    a.kind === b.kind ? a.leaf.localeCompare(b.leaf) : a.kind.localeCompare(b.kind),
+  );
+  return out;
+}
+
+/**
+ * Content-addressed cache over `normalizeRepo`: materializes `checkoutDir` into
+ * `<storeRoot>/derived/<hashTree(checkoutDir)>`, reusing that dir on repeat calls
+ * instead of re-normalizing. Stages into a temp dir and renames into place so
+ * concurrent callers racing on the same hash converge on one winner.
+ */
+export function ensureNormalized(checkoutDir: string, storeRoot: string): EnsureNormalizedResult {
+  const hash = hashTree(checkoutDir);
+  const finalDir = join(storeRoot, "derived", hash);
+  if (existsSync(finalDir)) {
+    return { dir: finalDir, artifacts: indexNormalized(finalDir), warnings: [] };
+  }
+  mkdirSync(join(storeRoot, "derived"), { recursive: true });
+  const staging = join(
+    storeRoot,
+    "derived",
+    `.staging-${process.pid}-${Math.random().toString(36).slice(2, 10)}`,
+  );
+  try {
+    const { warnings } = normalizeRepo(checkoutDir, staging);
+    if (!existsSync(finalDir)) {
+      try {
+        renameSync(staging, finalDir);
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code !== "ENOTEMPTY" && code !== "EEXIST") throw e;
+      }
+    }
+    return { dir: finalDir, artifacts: indexNormalized(finalDir), warnings };
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
   }
 }

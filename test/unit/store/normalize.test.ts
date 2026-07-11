@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { normalizeRepo } from "../../../src/store/normalize.ts";
+import { hashTree } from "../../../src/store/content-hash.ts";
+import { ensureNormalized, normalizeRepo } from "../../../src/store/normalize.ts";
 import { cleanup, makeTmpDir, writeFile } from "../../helpers/tmp.ts";
 
 describe("normalizeRepo — skills", () => {
@@ -248,5 +249,30 @@ describe("normalizeRepo — mcpServers conversion", () => {
     const mcp = artifacts.find((a) => a.kind === "mcps" && a.leaf === "srv")!;
     expect(readFileSync(join(mcp.dir, "MCP.md"), "utf8")).toMatch(/command:\s*["']?\.\/bin\/srv/);
     expect(existsSync(join(mcp.dir, "bin/srv"))).toBe(true);
+  });
+});
+
+describe("ensureNormalized", () => {
+  let checkout: string;
+  let store: string;
+  beforeEach(() => {
+    checkout = makeTmpDir("umbel-co-");
+    store = makeTmpDir("umbel-store-");
+    writeFile(join(checkout, "skills/s/SKILL.md"), "---\nname: s\n---\n");
+  });
+  afterEach(() => {
+    cleanup(checkout);
+    cleanup(store);
+  });
+
+  it("materializes into <store>/derived/<contentHash> and reuses it on repeat", () => {
+    const ch = hashTree(checkout);
+    const r1 = ensureNormalized(checkout, store);
+    expect(r1.dir).toBe(join(store, "derived", ch));
+    expect(existsSync(join(r1.dir, "skills/s/SKILL.md"))).toBe(true);
+    expect(r1.artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["skills/s"]);
+    const r2 = ensureNormalized(checkout, store);
+    expect(r2.dir).toBe(r1.dir);
+    expect(r2.artifacts.map((a) => `${a.kind}/${a.leaf}`)).toEqual(["skills/s"]);
   });
 });
