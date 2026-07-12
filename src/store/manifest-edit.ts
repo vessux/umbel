@@ -1,7 +1,7 @@
 import { type Document, isMap, isScalar, isSeq, parseDocument } from "yaml";
 import { UsageError } from "../errors.ts";
 
-const FM_RE = /^---\n([\s\S]*?)\n---(\n|$)/;
+const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/;
 const REF_LISTS = ["skills", "agents", "hooks", "mcps"] as const;
 
 /**
@@ -22,7 +22,10 @@ function withFrontmatterDoc(raw: string, fn: (doc: Document) => void): string {
   }
   fn(doc);
   const body = raw.slice(m[0].length);
-  return `---\n${doc.toString()}---\n${body}`;
+  const out = `---\n${doc.toString()}---\n${body}`;
+  // gray-matter reads CRLF manifests, so the writer must too. Re-emit in the
+  // frontmatter's own line-ending style rather than leaving mixed endings.
+  return m[0].includes("\r\n") ? out.replace(/\r?\n/g, "\r\n") : out;
 }
 
 /** Remove seq items matching `pred`; delete the key entirely if the list empties. */
