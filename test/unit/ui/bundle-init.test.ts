@@ -8,7 +8,7 @@ vi.mock("@clack/prompts", () => ({
   multiselect: vi.fn(),
   groupMultiselect: vi.fn(),
   confirm: vi.fn(),
-  isCancel: () => false,
+  isCancel: (v: unknown) => v === "__CANCEL__",
   spinner: () => ({ start() {}, stop() {} }),
 }));
 
@@ -392,6 +392,14 @@ describe("runReview", () => {
     expect(out.deps).toEqual([]); // the refused dep is not added
     expect(out.poolSkills).toEqual(["local/x"]); // prior work survives
     cleanup(root);
+  });
+
+  it("a Ctrl-C mid-dep still aborts the whole wizard (cancel is not swallowed as a failed dep)", async () => {
+    vi.mocked(clack.select).mockResolvedValueOnce("dep"); // Review: add dep
+    vi.mocked(clack.text).mockResolvedValueOnce("__CANCEL__" as unknown as string); // Ctrl-C at coordinate
+    await expect(
+      runReview(reviewDraft({}), { env: {} as NodeJS.ProcessEnv, artifactRoots: NO_ROOTS }),
+    ).rejects.toBeTruthy();
   });
 
   it("a dep fetch failure mid-loop returns to Review with the dep not added, preserving prior work", async () => {
