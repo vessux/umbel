@@ -1,11 +1,9 @@
-import { storeRootDir } from "../bundle/env.ts";
 import { NAME_RE } from "../bundle/manifest.ts";
 import { UsageError } from "../errors.ts";
-import { deriveAlias, githubUrl, parseCoordinate } from "./coordinate.ts";
-import { parseGithubTarget } from "./github-target.ts";
+import { fetchAndNormalize } from "./acquire.ts";
+import { deriveAlias } from "./coordinate.ts";
 import { importNormalizedDir } from "./import.ts";
-import { ensureNormalized } from "./normalize.ts";
-import { ensureCheckout, resolveDefaultBranch } from "./store.ts";
+import { resolveGithubCoordinate } from "./store.ts";
 
 export async function runAdopt(
   rest: string[],
@@ -23,12 +21,7 @@ export async function runAdopt(
   if (urlArg === undefined) throw new UsageError("umbel adopt: a GitHub URL is required");
   if (extra !== undefined) throw new UsageError(`umbel adopt: unexpected argument: ${extra}`);
 
-  const target = parseGithubTarget(urlArg);
-  const provisional = parseCoordinate(`github:${target.org}/${target.repo}@HEAD`);
-  const url = githubUrl(provisional, env);
-  const branch = target.ref ?? resolveDefaultBranch(url);
-  const coord = parseCoordinate(`github:${target.org}/${target.repo}@${branch}`);
-
+  const coord = resolveGithubCoordinate(urlArg, env);
   const name = nameArg ?? deriveAlias(coord);
   if (!NAME_RE.test(name)) {
     throw new UsageError(
@@ -36,16 +29,7 @@ export async function runAdopt(
     );
   }
 
-  const checkout = ensureCheckout({ coord, url, storeRoot: storeRootDir(env) });
-  const {
-    dir: derivedDir,
-    artifacts,
-    warnings,
-  } = ensureNormalized(checkout.dir, storeRootDir(env));
-  if (artifacts.length === 0)
-    throw new UsageError(`umbel adopt: no artifacts found in ${coord.raw}`);
-  for (const w of warnings) process.stderr.write(`${w}\n`);
-
+  const { checkout, derivedDir } = fetchAndNormalize(coord, env, "adopt");
   const commit = checkout.commit.slice(0, 12);
   await importNormalizedDir({
     dir: derivedDir,
@@ -53,7 +37,7 @@ export async function runAdopt(
     env,
     yes,
     headerComment: `adopted-from: ${coord.raw} (${commit})`,
-    what: `repo '${target.org}/${target.repo}' (adopt)`,
+    what: `repo '${coord.org}/${coord.repo}' (adopt)`,
     verb: "adopt",
   });
 
