@@ -21,6 +21,7 @@ import {
   runEditWizard,
   runInitWizard,
   runReview,
+  validateGithubCoord,
 } from "../../../src/ui/bundle-init.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
 import { buildSourceTree, cleanup, makeTmpDir } from "../../helpers/tmp.ts";
@@ -216,6 +217,63 @@ describe("addDependencyInteractive", () => {
     expect(dep?.selectedSkills).toEqual(["greet"]);
     expect(dep?.commit).toMatch(/^[0-9a-f]{40}$/);
     cleanup(root);
+  });
+
+  it("accepts a pasted bare GitHub URL, resolving the default branch into the coordinate", async () => {
+    const root = makeTmpDir();
+    const gh = join(root, "gh", "acme", "tools");
+    makeGitFixture(gh, { "skills/greet/SKILL.md": "---\nname: greet\n---\n" }, "v1");
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.text).mockResolvedValueOnce("https://github.com/acme/tools"); // pasted URL
+    vi.mocked(clack.text).mockResolvedValueOnce("tools"); // alias
+    vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["greet"]);
+    const dep = await addDependencyInteractive({ env, existingAliases: new Set() });
+    expect(dep?.coordinate).toBe("github:acme/tools@main");
+    expect(dep?.commit).toMatch(/^[0-9a-f]{40}$/);
+    cleanup(root);
+  });
+});
+
+describe("validateGithubCoord", () => {
+  it("accepts a bare GitHub URL", () => {
+    expect(validateGithubCoord("https://github.com/acme/tools")).toBeUndefined();
+  });
+
+  it("accepts a bare GitHub URL carrying a /tree/<ref>", () => {
+    expect(validateGithubCoord("https://github.com/acme/tools/tree/v1")).toBeUndefined();
+  });
+
+  it("accepts a pinned github: coordinate", () => {
+    expect(validateGithubCoord("github:acme/tools@v1")).toBeUndefined();
+  });
+
+  it("accepts an unpinned github: coordinate", () => {
+    expect(validateGithubCoord("github:acme/tools")).toBeUndefined();
+  });
+
+  it("reports an empty input", () => {
+    expect(validateGithubCoord("")).toBe("coordinate required");
+    expect(validateGithubCoord("   ")).toBe("coordinate required");
+  });
+
+  it("steers link:/local inputs to hand-editing rather than the target parser's error", () => {
+    expect(validateGithubCoord("local")).toMatch(/hand-edit/);
+    expect(validateGithubCoord("link:/some/dir")).toMatch(/hand-edit/);
+  });
+
+  it("surfaces the target parser's message for an unrecognized shape", () => {
+    expect(validateGithubCoord("git:acme/tools")).toMatch(/GitHub URL/);
+  });
+
+  it("rejects a #subpath in the ref inline, not after the prompt", () => {
+    expect(validateGithubCoord("github:acme/tools@v1#sub")).toMatch(/#subpath/);
+  });
+
+  it("rejects variable expansion in the ref inline, not after the prompt", () => {
+    expect(validateGithubCoord("github:acme/tools@v${x}")).toMatch(/variable expansion/);
   });
 });
 

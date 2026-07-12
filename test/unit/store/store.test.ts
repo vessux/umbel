@@ -2,9 +2,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NotFoundError } from "../../../src/errors.ts";
+import { NotFoundError, UsageError } from "../../../src/errors.ts";
 import { parseCoordinate } from "../../../src/store/coordinate.ts";
-import { checkoutPath, ensureCheckout, resolveBranchTip } from "../../../src/store/store.ts";
+import {
+  checkoutPath,
+  ensureCheckout,
+  resolveBranchTip,
+  resolveGithubCoordinate,
+} from "../../../src/store/store.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
 import { cleanup, makeTmpDir } from "../../helpers/tmp.ts";
 
@@ -161,5 +166,49 @@ describe("resolveBranchTip", () => {
     expect(featureTip).not.toBe(commit);
     // `main` must resolve to main's tip, never feature/main's.
     expect(tip("main")).toBe(commit);
+  });
+});
+
+describe("resolveGithubCoordinate", () => {
+  let root: string;
+  let env: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    root = makeTmpDir();
+    // Fetch URL is ${UMBEL_GITHUB_BASE}/<org>/<repo>; default branch is `main`.
+    makeGitFixture(join(root, "gh", "acme", "tools"), { "README.md": "hi\n" });
+    env = { UMBEL_GITHUB_BASE: `file://${join(root, "gh")}` } as unknown as NodeJS.ProcessEnv;
+  });
+  afterEach(() => cleanup(root));
+
+  it("normalizes a bare GitHub URL, resolving the remote's default branch", () => {
+    const coord = resolveGithubCoordinate("https://github.com/acme/tools", env);
+    expect(coord.transport).toBe("github");
+    expect(coord.raw).toBe("github:acme/tools@main");
+  });
+
+  it("keeps a ref carried by the URL's /tree/<ref> segment (no default lookup)", () => {
+    expect(resolveGithubCoordinate("https://github.com/acme/tools/tree/v9", env).raw).toBe(
+      "github:acme/tools@v9",
+    );
+  });
+
+  it("passes a pinned github: coordinate through unchanged", () => {
+    expect(resolveGithubCoordinate("github:acme/tools@v1", env).raw).toBe("github:acme/tools@v1");
+  });
+
+  it("resolves the default branch for an unpinned github: coordinate", () => {
+    expect(resolveGithubCoordinate("github:acme/tools", env).raw).toBe("github:acme/tools@main");
+  });
+
+  it("trims surrounding whitespace from a pasted URL", () => {
+    expect(resolveGithubCoordinate("  https://github.com/acme/tools\n", env).raw).toBe(
+      "github:acme/tools@main",
+    );
+  });
+
+  it("rejects an input that is neither a GitHub URL nor a github: coordinate", () => {
+    expect(() => resolveGithubCoordinate("git:acme/tools", env)).toThrow(UsageError);
+    expect(() => resolveGithubCoordinate("git:acme/tools", env)).toThrow(/GitHub URL/);
   });
 });
