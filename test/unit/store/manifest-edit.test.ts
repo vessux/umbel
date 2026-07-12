@@ -181,6 +181,48 @@ describe("addRefEdit", () => {
   });
 });
 
+describe("CRLF frontmatter (read/write parity)", () => {
+  const CRLF = RAW.replace(/\n/g, "\r\n");
+
+  it("edits a CRLF manifest instead of rejecting it (reader accepts what writer must too)", () => {
+    const out = addDepEdit(CRLF, "tools", "github:acme/tools@v1", "tools/greet");
+    expect(out).toContain("# my dev bundle");
+    expect(out).toContain("Body prose stays.");
+    expect(out).toMatch(/tools: github:acme\/tools@v1/);
+    expect(out).toMatch(/tools\/greet/);
+  });
+
+  it("preserves CRLF line endings on re-emit (no mixed endings)", () => {
+    const out = addDepEdit(CRLF, "tools", "github:acme/tools@v1", "tools/greet");
+    expect(out).not.toMatch(/[^\r]\n/);
+    expect(out).toContain("\r\n");
+  });
+
+  it("re-emitted CRLF output loads back as a valid manifest", () => {
+    const dir = makeTmpDir();
+    try {
+      const p = join(dir, "dev.md");
+      writeFileSync(p, addDepEdit(CRLF, "tools", "github:acme/tools@v1", "tools/greet"));
+      const { manifest } = loadManifest(p);
+      expect(manifest.deps).toEqual({ tools: "github:acme/tools@v1" });
+      expect(manifest.skills).toEqual(["local/tdd", "tools/greet"]);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it("leaves LF manifests as pure LF (no stray CR introduced)", () => {
+    const out = addDepEdit(RAW, "tools", "github:acme/tools@v1", "tools/greet");
+    expect(out).not.toContain("\r");
+  });
+
+  it("removeDepEdit and renameBundleEdit also accept CRLF", () => {
+    const crlfSample = SAMPLE.replace(/\n/g, "\r\n");
+    expect(() => removeDepEdit(crlfSample, "tdd")).not.toThrow();
+    expect(renameBundleEdit(crlfSample, "web-fork")).toMatch(/name: web-fork/);
+  });
+});
+
 describe("renameBundleEdit", () => {
   it("rewrites the name field, preserving everything else", () => {
     const out = renameBundleEdit(SAMPLE, "web-fork");
