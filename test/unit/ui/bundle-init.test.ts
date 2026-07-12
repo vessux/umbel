@@ -362,6 +362,57 @@ describe("runReview", () => {
       runReview(reviewDraft({}), { env: {} as NodeJS.ProcessEnv, artifactRoots: NO_ROOTS }),
     ).rejects.toBeTruthy();
   });
+
+  it("a trust refusal mid-loop returns to Review with the dep not added, preserving prior work", async () => {
+    const root = makeTmpDir();
+    const gh = join(root, "gh", "acme", "tools");
+    makeGitFixture(
+      gh,
+      {
+        "skills/greet/SKILL.md": "---\nname: greet\n---\n",
+        "hooks/deploy/HOOK.md":
+          "---\nname: deploy\nevent: PreToolUse\nmatcher: Bash\ncommand: ./x.sh\n---\n",
+      },
+      "v1",
+    );
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "gh")}`,
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.select).mockResolvedValueOnce("dep"); // Review: add dep
+    vi.mocked(clack.text).mockResolvedValueOnce("github:acme/tools@v1"); // coordinate
+    vi.mocked(clack.text).mockResolvedValueOnce("tools"); // alias
+    vi.mocked(clack.confirm).mockResolvedValueOnce(false); // refuse trust → TrustError
+    vi.mocked(clack.select).mockResolvedValueOnce("write"); // back at Review → write
+
+    const out = await runReview(reviewDraft({ poolSkills: ["local/x"] }), {
+      env,
+      artifactRoots: NO_ROOTS,
+    });
+    expect(out.deps).toEqual([]); // the refused dep is not added
+    expect(out.poolSkills).toEqual(["local/x"]); // prior work survives
+    cleanup(root);
+  });
+
+  it("a dep fetch failure mid-loop returns to Review with the dep not added, preserving prior work", async () => {
+    const root = makeTmpDir();
+    const env = {
+      UMBEL_GITHUB_BASE: `file://${join(root, "empty")}`, // nothing to clone
+      UMBEL_DATA_DIR: join(root, "data"),
+    } as unknown as NodeJS.ProcessEnv;
+    vi.mocked(clack.select).mockResolvedValueOnce("dep"); // Review: add dep
+    vi.mocked(clack.text).mockResolvedValueOnce("github:acme/tools@v1"); // coordinate
+    vi.mocked(clack.text).mockResolvedValueOnce("tools"); // alias
+    vi.mocked(clack.select).mockResolvedValueOnce("write"); // back at Review → write
+
+    const out = await runReview(reviewDraft({ poolSkills: ["local/x"] }), {
+      env,
+      artifactRoots: NO_ROOTS,
+    });
+    expect(out.deps).toEqual([]); // the unfetchable dep is not added
+    expect(out.poolSkills).toEqual(["local/x"]); // prior work survives
+    cleanup(root);
+  });
 });
 
 describe("listAvailableArtifacts", () => {

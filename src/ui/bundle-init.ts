@@ -8,7 +8,7 @@ import { artifactRoots, storeRootDir } from "../bundle/env.ts";
 import { loadBundleIndex } from "../bundle/exec.ts";
 import { NAME_RE } from "../bundle/manifest.ts";
 import { findProjectRoot } from "../bundle/pin.ts";
-import { CancelledError, NotFoundError, UsageError } from "../errors.ts";
+import { CancelledError, CliError, NotFoundError, UsageError } from "../errors.ts";
 import { walkArtifactRoot } from "../source/walk.ts";
 import { listSkillLeaves } from "../store/artifacts.ts";
 import { ALIAS_RE, deriveAlias, githubUrl, parseCoordinate } from "../store/coordinate.ts";
@@ -404,11 +404,20 @@ export async function runReview(draft: Draft, ctx: ReviewContext): Promise<Draft
     if (action === "write") return d;
     if (action === "cancel") throw new CancelledError();
     if (action === "dep") {
-      const dep = await addDependencyInteractive({
-        env: ctx.env,
-        existingAliases: new Set(d.deps.map((x) => x.alias)),
-      });
-      if (dep) d = { ...d, deps: [...d.deps, dep] };
+      // One bad dep must not nuke the session (gh#78). A fetch failure or trust
+      // refusal (both CliError) drops back to Review with the dep not added,
+      // everything else preserved. CancelledError (Ctrl-C) is not a CliError, so
+      // it still propagates — a deliberate abort of the whole wizard stands.
+      try {
+        const dep = await addDependencyInteractive({
+          env: ctx.env,
+          existingAliases: new Set(d.deps.map((x) => x.alias)),
+        });
+        if (dep) d = { ...d, deps: [...d.deps, dep] };
+      } catch (err) {
+        if (!(err instanceof CliError)) throw err;
+        process.stderr.write(`${err.message}\numbel: dependency not added; returning to review.\n`);
+      }
     } else if (action === "rmdep") {
       d = await removeDepInteractive(d);
     } else if (action === "skills") {
