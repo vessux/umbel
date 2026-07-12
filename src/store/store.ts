@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CliError, NotFoundError } from "../errors.ts";
 import { hashTree } from "./content-hash.ts";
-import type { Coordinate } from "./coordinate.ts";
+import {
+  type Coordinate,
+  type GithubCoordinate,
+  githubUrl,
+  parseCoordinate,
+} from "./coordinate.ts";
+import { parseGithubTarget } from "./github-target.ts";
 
 export interface Checkout {
   commit: string;
@@ -73,6 +79,21 @@ export function resolveDefaultBranch(url: string): string {
     if (m) return m[1]!;
   }
   throw new NotFoundError(`${url}: could not determine a default branch`);
+}
+
+/**
+ * Normalize a pasted dependency string — a bare GitHub URL
+ * (`https://github.com/<org>/<repo>[/tree/<ref>]`) or a
+ * `github:<org>/<repo>[@<ref>]` coordinate — into a fully pinned github
+ * coordinate, resolving the remote's default branch when no ref is carried.
+ * This is the target→pin composition `try`/`adopt` currently run inline; #73
+ * will fold those callers onto this helper.
+ */
+export function resolveGithubCoordinate(input: string, env: NodeJS.ProcessEnv): GithubCoordinate {
+  const target = parseGithubTarget(input.trim());
+  const provisional = parseCoordinate(`github:${target.org}/${target.repo}@HEAD`);
+  const ref = target.ref ?? resolveDefaultBranch(githubUrl(provisional, env));
+  return parseCoordinate(`github:${target.org}/${target.repo}@${ref}`) as GithubCoordinate;
 }
 
 export function ensureCheckout(opts: EnsureOpts): Checkout {

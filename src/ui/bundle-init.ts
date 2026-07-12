@@ -12,8 +12,9 @@ import { CancelledError, NotFoundError, UsageError } from "../errors.ts";
 import { walkArtifactRoot } from "../source/walk.ts";
 import { listSkillLeaves } from "../store/artifacts.ts";
 import { ALIAS_RE, deriveAlias, githubUrl, parseCoordinate } from "../store/coordinate.ts";
+import { parseGithubTarget } from "../store/github-target.ts";
 import { lockPathFor, readLock } from "../store/lock.ts";
-import { ensureCheckout } from "../store/store.ts";
+import { ensureCheckout, resolveGithubCoordinate } from "../store/store.ts";
 import { resolveTarget, resolveTargetOrPick } from "../store/target.ts";
 import { gateTrust, planTrust } from "../store/trust.ts";
 import { isInteractive } from "../tty.ts";
@@ -295,11 +296,11 @@ export interface DepAddContext {
 export async function addDependencyInteractive(ctx: DepAddContext): Promise<DepDraft | null> {
   const rawCoord = assertSelected(
     await text({
-      message: "Dependency coordinate (github:<org>/<repo>@<tag>):",
+      message: "Dependency (paste a GitHub URL or github:<org>/<repo>@<tag>):",
       validate: (v) => validateGithubCoord(v ?? ""),
     }),
   );
-  const coord = parseCoordinate(rawCoord);
+  const coord = resolveGithubCoordinate(rawCoord, ctx.env);
   const suggested = deriveAlias(coord);
   const alias = assertSelected(
     await text({
@@ -352,16 +353,23 @@ export async function addDependencyInteractive(ctx: DepAddContext): Promise<DepD
   };
 }
 
-function validateGithubCoord(v: string): string | undefined {
-  if (v.trim().length === 0) return "coordinate required";
-  let coord: ReturnType<typeof parseCoordinate>;
+export function validateGithubCoord(v: string): string | undefined {
+  const raw = v.trim();
+  if (raw.length === 0) return "coordinate required";
+  if (raw === "local" || raw.startsWith("link:")) {
+    return "the wizard supports github: deps only; hand-edit deps: for link:/local (see umbel-cwb)";
+  }
   try {
-    coord = parseCoordinate(v);
+    // Shape-only (no network): accepts a bare GitHub URL or a github: coord.
+    // The default ref is resolved after the prompt, not in this sync validator.
+    // A carried ref is round-tripped through parseCoordinate so a bad one
+    // (#subpath, ${…}) is caught inline rather than aborting the wizard later.
+    const target = parseGithubTarget(raw);
+    if (target.ref !== undefined) {
+      parseCoordinate(`github:${target.org}/${target.repo}@${target.ref}`);
+    }
   } catch (err) {
     return err instanceof UsageError ? err.message : String(err);
-  }
-  if (coord.transport !== "github") {
-    return "the wizard supports github: deps only; hand-edit deps: for link:/local (see umbel-cwb)";
   }
   return undefined;
 }
