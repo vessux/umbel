@@ -475,3 +475,98 @@ describe("normalizeRepo — symlink containment", () => {
     expect(warnings.join(" ")).not.toMatch(/escapes/);
   });
 });
+
+describe("normalizeRepo — symlink containment (config reads)", () => {
+  let outer: string;
+  let checkout: string;
+  let dest: string;
+  beforeEach(() => {
+    outer = makeTmpDir("umbel-outer-");
+    checkout = join(outer, "repo");
+    dest = makeTmpDir("umbel-dest-");
+  });
+  afterEach(() => {
+    cleanup(outer);
+    cleanup(dest);
+  });
+
+  it("refuses a lone SKILL.md that is a symlink escaping the checkout", () => {
+    const secret = join(outer, "secret.md");
+    writeFile(secret, "---\nname: pwned\n---\nleak\n");
+    mkdirSync(checkout, { recursive: true });
+    symlinkSync(secret, join(checkout, "SKILL.md"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "skills")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses a .claude-plugin/plugin.json that is a symlink escaping the checkout", () => {
+    const secret = join(outer, "plugin.json");
+    writeFile(secret, JSON.stringify({ name: "kit" }));
+    mkdirSync(join(checkout, ".claude-plugin"), { recursive: true });
+    symlinkSync(secret, join(checkout, ".claude-plugin/plugin.json"));
+    writeFile(join(checkout, "agents/reviewer.md"), "---\nname: reviewer\n---\n");
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "agents")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses a hooks.json that is a symlink escaping the checkout", () => {
+    const secret = join(outer, "hooks.json");
+    writeFile(
+      secret,
+      JSON.stringify({
+        hooks: { Stop: [{ matcher: "", hooks: [{ type: "command", command: "echo pwned" }] }] },
+      }),
+    );
+    writeFile(join(checkout, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    mkdirSync(join(checkout, "hooks"), { recursive: true });
+    symlinkSync(secret, join(checkout, "hooks/hooks.json"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "hooks")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses a root .mcp.json that is a symlink escaping the checkout", () => {
+    const secret = join(outer, "mcp.json");
+    writeFile(secret, JSON.stringify({ mcpServers: { srv: { command: "echo pwned" } } }));
+    writeFile(join(checkout, ".claude-plugin/plugin.json"), JSON.stringify({ name: "kit" }));
+    symlinkSync(secret, join(checkout, ".mcp.json"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "mcps")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses a .claude-plugin dir that is a symlink escaping the checkout", () => {
+    writeFile(join(outer, "plugindir/plugin.json"), JSON.stringify({ name: "kit" }));
+    mkdirSync(checkout, { recursive: true });
+    symlinkSync(join(outer, "plugindir"), join(checkout, ".claude-plugin"));
+    writeFile(join(checkout, "agents/reviewer.md"), "---\nname: reviewer\n---\n");
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "agents")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+
+  it("refuses a custom plugin.hooks dir that is a symlink escaping the checkout", () => {
+    writeFile(
+      join(outer, "cfg/hooks.json"),
+      JSON.stringify({
+        hooks: { Stop: [{ matcher: "", hooks: [{ type: "command", command: "echo pwned" }] }] },
+      }),
+    );
+    writeFile(
+      join(checkout, ".claude-plugin/plugin.json"),
+      JSON.stringify({ name: "kit", hooks: "cfg" }),
+    );
+    symlinkSync(join(outer, "cfg"), join(checkout, "cfg"));
+
+    const { artifacts, warnings } = normalizeRepo(checkout, dest);
+    expect(artifacts.some((a) => a.kind === "hooks")).toBe(false);
+    expect(warnings.join(" ")).toMatch(/escapes/);
+  });
+});
