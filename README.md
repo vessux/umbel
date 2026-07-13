@@ -81,9 +81,37 @@ reference artifacts as `<source>/<leaf>`.
 Override the root with `UMBEL_ARTIFACTS_DIR` (default
 `$XDG_CONFIG_HOME/umbel`, typically `~/.config/umbel`).
 
-### General recipe — import a Claude Code plugin repo
+### Bringing in a Claude Code plugin repo
 
-Most community plugins are git repos with a `skills/<leaf>/SKILL.md` layout.
+You rarely need to place these files by hand — umbel has verbs that fetch a
+repo, normalize its layout, and wire it into a bundle for you:
+
+- **`umbel adopt <url>`** — fetch a GitHub repo and persist it as a new
+  user-scope bundle (artifacts copied into the pool). The normalizer
+  auto-detects the common repo shapes (a lone `SKILL.md`; `skills/`·`agents/`·
+  `hooks/`·`mcps/` trees; a repo of `<leaf>/<MARKER>` dirs; a `.claude-plugin/`)
+  and converts CC-native hooks/MCPs/agents into umbel artifacts.
+- **`umbel try <url>`** — the same fetch + normalize, then composes everything
+  and launches it ephemerally, with no persisted bundle (runs untrusted code —
+  sandbox it).
+- **`umbel add github:<org>/<repo>@<ref>`** — pin one dependency, lock it, and
+  compose a skill from it (the reproducible dependency-manager path).
+- **`umbel import <dir>`** — re-hydrate a *local* packed or CC plugin dir (one
+  carrying `.claude-plugin/plugin.json`) into a new bundle.
+
+So the obra/superpowers example is a one-liner:
+
+```bash
+umbel adopt https://github.com/obra/superpowers
+```
+
+which mirrors it into a `superpowers` bundle whose skills you then reference as
+`superpowers/<leaf>`, e.g. `superpowers/brainstorming`.
+
+#### Manual drop-in (escape hatch)
+
+umbel ultimately just composes what's on disk, so you can always place
+artifacts by hand — handy for a repo layout the verbs above don't recognize.
 Symlink (or copy) each skill into a source-qualified namespace:
 
 ```bash
@@ -100,23 +128,11 @@ Then reference them in a bundle as `$NS/<leaf>`. Repeat for `agents/`,
 `hooks/`, and `mcps/` if the upstream ships them.
 
 > Caveat: umbel's `HOOK.md` / `MCP.md` frontmatter is umbel-specific (see
-> [`docs/bundles-spec.md`](docs/bundles-spec.md)). Skills and agents drop in
-> as-is; hooks and MCPs from upstreams using a different config shape need a
-> small adapter file.
-
-### Example: obra/superpowers
-
-```bash
-git clone https://github.com/obra/superpowers /tmp/superpowers
-mkdir -p ~/.config/umbel/skills/superpowers
-ln -sf /tmp/superpowers/skills/*/ ~/.config/umbel/skills/superpowers/
-```
-
-Then in a bundle:
-
-```yaml
-skills: [superpowers/brainstorming, superpowers/test-driven-development]
-```
+> [`docs/bundles-spec.md`](docs/bundles-spec.md)). By hand, artifacts already in
+> umbel's `<kind>/<leaf>/<MARKER>` layout drop in as-is, but hooks and MCPs from
+> an upstream using a different config shape need a small adapter file. The
+> `adopt`/`try` normalizer does that conversion — including CC-native hooks,
+> MCPs, and agents — for you.
 
 ## Why
 
