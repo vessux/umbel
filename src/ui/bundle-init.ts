@@ -286,6 +286,29 @@ async function pickWithInherited(
 export interface DepAddContext {
   env: NodeJS.ProcessEnv;
   existingAliases: Set<string>;
+  /**
+   * Pool/local source names (the `<source>` head of every pool skill ref).
+   * A dep alias colliding with one of these makes applySkillSelection route the
+   * pool's `<source>/*` refs into the dep — a silently mis-resolving manifest
+   * (gh#77), so the alias validator rejects the collision.
+   */
+  poolSources: Set<string>;
+}
+
+/**
+ * Validates a proposed dependency alias against the reserved namespace: it must
+ * match ALIAS_RE and collide with neither an existing dep alias nor a pool/local
+ * source name. Extracted (like validateGithubCoord) so it is unit-testable —
+ * the clack prompt mock never invokes the inline validator.
+ */
+export function validateAlias(
+  v: string,
+  reserved: { existingAliases: Set<string>; poolSources: Set<string> },
+): string | undefined {
+  if (!ALIAS_RE.test(v)) return `alias must match ${ALIAS_RE.source}`;
+  if (reserved.existingAliases.has(v)) return `alias '${v}' is already used in this bundle`;
+  if (reserved.poolSources.has(v)) return `alias '${v}' collides with pool source '${v}'`;
+  return undefined;
 }
 
 /**
@@ -306,11 +329,11 @@ export async function addDependencyInteractive(ctx: DepAddContext): Promise<DepD
     await text({
       message: "Alias for this dependency:",
       initialValue: suggested,
-      validate: (v) => {
-        if (!ALIAS_RE.test(v ?? "")) return `alias must match ${ALIAS_RE.source}`;
-        if (ctx.existingAliases.has(v ?? "")) return `alias '${v}' is already used in this bundle`;
-        return undefined;
-      },
+      validate: (v) =>
+        validateAlias(v ?? "", {
+          existingAliases: ctx.existingAliases,
+          poolSources: ctx.poolSources,
+        }),
     }),
   );
 
@@ -412,6 +435,7 @@ export async function runReview(draft: Draft, ctx: ReviewContext): Promise<Draft
         const dep = await addDependencyInteractive({
           env: ctx.env,
           existingAliases: new Set(d.deps.map((x) => x.alias)),
+          poolSources: poolSourceNames(d, ctx.artifactRoots),
         });
         if (dep) d = { ...d, deps: [...d.deps, dep] };
       } catch (err) {
@@ -441,6 +465,22 @@ function dedupe(arr: string[]): string[] {
 function headOf(ref: string): string {
   const slash = ref.indexOf("/");
   return slash >= 0 ? ref.slice(0, slash) : ref;
+}
+
+/**
+ * The pool/local `<source>` heads a new dep alias must not collide with: every
+ * skill and agent pool source on disk plus any already in the draft (gh#77).
+ * resolveSources routes a `<source>/<leaf>` ref through a dep whenever the head
+ * matches a dep alias — for *any* kind — so a colliding alias silently reroutes
+ * a pool skill into the dep, and hard-fails a pool agent (store-backed agents
+ * are unsupported). Both are broken manifests, so both kinds are reserved.
+ */
+export function poolSourceNames(d: Draft, roots: { skills: string; agents: string }): Set<string> {
+  const names = new Set<string>();
+  for (const ref of listAvailableArtifacts(roots.skills, "SKILL.md")) names.add(headOf(ref));
+  for (const ref of listAvailableArtifacts(roots.agents, "AGENT.md")) names.add(headOf(ref));
+  for (const ref of [...d.poolSkills, ...d.poolAgents]) names.add(headOf(ref));
+  return names;
 }
 
 function lockedOptions(candidates: string[], locked: Set<string>): GroupedOption<string>[] {
