@@ -123,8 +123,11 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
   indexUmbelShaped(src, place);
 
   // Lone SKILL.md at the repo root: leaf = frontmatter name, else repo basename.
-  if (existsSync(join(src, "SKILL.md"))) {
-    const fm = readFrontmatter(join(src, "SKILL.md"));
+  const soloSkill = join(src, "SKILL.md");
+  if (existsSync(soloSkill) && !withinCheckout(src, soloSkill)) {
+    warnings.push("lone SKILL.md escapes the repo (symlink) — skipped");
+  } else if (existsSync(soloSkill)) {
+    const fm = readFrontmatter(soloSkill);
     const to = register("skills", fm.name ?? basename(src));
     if (to !== null) {
       mkdirSync(to, { recursive: true });
@@ -165,7 +168,9 @@ export function normalizeRepo(src: string, dest: string): NormalizeResult {
     const inline = typeof plugin.mcpServers === "object" ? plugin.mcpServers : undefined;
     if (inline) convertMcpServers(inline, src, register, uniqueLeaf, warnings);
     const rootMcp = join(src, ".mcp.json");
-    if (existsSync(rootMcp)) {
+    if (existsSync(rootMcp) && !withinCheckout(src, rootMcp)) {
+      warnings.push(".mcp.json escapes the repo (symlink) — mcps skipped");
+    } else if (existsSync(rootMcp)) {
       try {
         const parsed = JSON.parse(readFileSync(rootMcp, "utf8")) as {
           mcpServers?: Record<string, Record<string, unknown>>;
@@ -230,6 +235,10 @@ interface PluginJson {
 function readPluginJson(src: string, warnings: string[]): PluginJson | null {
   const p = join(src, ".claude-plugin", "plugin.json");
   if (!existsSync(p)) return null;
+  if (!withinCheckout(src, p)) {
+    warnings.push("plugin.json escapes the repo (symlink) — skipping .claude-plugin layout");
+    return null;
+  }
   try {
     return JSON.parse(readFileSync(p, "utf8")) as PluginJson;
   } catch {
@@ -350,6 +359,10 @@ function convertHooksJson(
   uniqueLeaf: (base: string, kind: ArtifactKind) => string,
   warnings: string[],
 ): void {
+  if (!withinCheckout(srcRoot, hooksJsonPath)) {
+    warnings.push("hooks.json escapes the repo (symlink) — hooks skipped");
+    return;
+  }
   let parsed: { hooks?: Record<string, Array<{ matcher?: string; hooks?: RawHookCommand[] }>> };
   try {
     parsed = JSON.parse(readFileSync(hooksJsonPath, "utf8"));
