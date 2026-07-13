@@ -17,4 +17,12 @@ describe("helpText", () => {
     expect(help).toContain("umbel remove");
     expect(help).toContain("umbel fork");
   });
+
+  it("lists the --yes trust-override flag on add and install", () => {
+    const lines = helpText().split("\n");
+    const addLine = lines.find((l) => l.includes("umbel add "));
+    const installLine = lines.find((l) => l.includes("umbel install "));
+    expect(addLine).toContain("--yes");
+    expect(installLine).toContain("--yes");
+  });
 });
