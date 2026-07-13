@@ -714,6 +714,8 @@ umbel try    <url> [--yes] [-- ...args]           # fetch + compose everything +
 umbel adopt  <url> [<name>] [--yes]               # create a bundle mirroring one source (pool-copy)
 umbel apply  [<name>] [--vanilla]                 # write pin + warm cache (--vanilla = pin "no bundle")
 umbel unpin                                       # remove pin
+umbel add    <coord> [leaf] [--bundle] [--yes]    # fetch a dependency, lock it, compose a skill
+umbel install [--frozen] [--bundle] [--yes]       # reconcile deps ↔ lock + fetch (--frozen: strict)
 umbel remove <alias> | <alias>/<leaf> [--bundle]  # drop a dependency or one artifact
 umbel update [<alias>] [--bundle] [--yes]         # move branch pins to newest + re-lock
 umbel outdated [--bundle]                         # read-only: branch deps with newer commits
