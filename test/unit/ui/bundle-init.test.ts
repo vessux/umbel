@@ -18,13 +18,30 @@ import type { Draft } from "../../../src/ui/authoring.ts";
 import {
   addDependencyInteractive,
   listAvailableArtifacts,
+  poolSourceNames,
   runEditWizard,
   runInitWizard,
   runReview,
+  validateAlias,
   validateGithubCoord,
 } from "../../../src/ui/bundle-init.ts";
 import { makeGitFixture } from "../../helpers/git.ts";
 import { buildSourceTree, cleanup, makeTmpDir } from "../../helpers/tmp.ts";
+
+function emptyDraft(over: Partial<Draft> = {}): Draft {
+  return {
+    name: "b",
+    description: "",
+    scope: "user",
+    extendsList: [],
+    deps: [],
+    poolSkills: [],
+    poolAgents: [],
+    inheritedSkills: [],
+    inheritedAgents: [],
+    ...over,
+  };
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -212,7 +229,11 @@ describe("addDependencyInteractive", () => {
     vi.mocked(clack.text).mockResolvedValueOnce("github:acme/tools@v1");
     vi.mocked(clack.text).mockResolvedValueOnce("tools");
     vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["greet"]);
-    const dep = await addDependencyInteractive({ env, existingAliases: new Set() });
+    const dep = await addDependencyInteractive({
+      env,
+      existingAliases: new Set(),
+      poolSources: new Set(),
+    });
     expect(dep?.alias).toBe("tools");
     expect(dep?.selectedSkills).toEqual(["greet"]);
     expect(dep?.commit).toMatch(/^[0-9a-f]{40}$/);
@@ -230,7 +251,11 @@ describe("addDependencyInteractive", () => {
     vi.mocked(clack.text).mockResolvedValueOnce("https://github.com/acme/tools"); // pasted URL
     vi.mocked(clack.text).mockResolvedValueOnce("tools"); // alias
     vi.mocked(clack.groupMultiselect).mockResolvedValueOnce(["greet"]);
-    const dep = await addDependencyInteractive({ env, existingAliases: new Set() });
+    const dep = await addDependencyInteractive({
+      env,
+      existingAliases: new Set(),
+      poolSources: new Set(),
+    });
     expect(dep?.coordinate).toBe("github:acme/tools@main");
     expect(dep?.commit).toMatch(/^[0-9a-f]{40}$/);
     cleanup(root);
@@ -274,6 +299,61 @@ describe("validateGithubCoord", () => {
 
   it("rejects variable expansion in the ref inline, not after the prompt", () => {
     expect(validateGithubCoord("github:acme/tools@v${x}")).toMatch(/variable expansion/);
+  });
+});
+
+describe("validateAlias", () => {
+  const reserved = (
+    over: Partial<{ existingAliases: Set<string>; poolSources: Set<string> }> = {},
+  ) => ({
+    existingAliases: new Set<string>(),
+    poolSources: new Set<string>(),
+    ...over,
+  });
+
+  it("accepts a well-formed alias that collides with nothing", () => {
+    expect(validateAlias("tools", reserved())).toBeUndefined();
+  });
+
+  it("rejects an alias that violates ALIAS_RE", () => {
+    expect(validateAlias("Bad Alias", reserved())).toMatch(/alias must match/);
+  });
+
+  it("rejects an alias already used by a dependency", () => {
+    expect(validateAlias("tools", reserved({ existingAliases: new Set(["tools"]) }))).toMatch(
+      /already used/,
+    );
+  });
+
+  it("rejects an alias colliding with a pool/local source name", () => {
+    expect(validateAlias("local", reserved({ poolSources: new Set(["local"]) }))).toMatch(
+      /pool source/,
+    );
+  });
+});
+
+describe("poolSourceNames", () => {
+  let root: string;
+  beforeEach(() => {
+    root = makeTmpDir();
+  });
+  afterEach(() => {
+    cleanup(root);
+  });
+
+  it("reserves skill AND agent pool source heads, from disk and from the draft", () => {
+    const skills = join(root, "skills");
+    const agents = join(root, "agents");
+    mkdirSync(join(skills, "foo", "a"), { recursive: true });
+    writeFileSync(join(skills, "foo", "a", "SKILL.md"), "---\nname: a\n---\n");
+    mkdirSync(join(agents, "bar", "x"), { recursive: true });
+    writeFileSync(join(agents, "bar", "x", "AGENT.md"), "---\nname: x\n---\n");
+
+    const got = poolSourceNames(emptyDraft({ poolSkills: ["baz/s"], poolAgents: ["qux/g"] }), {
+      skills,
+      agents,
+    });
+    expect([...got].sort()).toEqual(["bar", "baz", "foo", "qux"]);
   });
 });
 
