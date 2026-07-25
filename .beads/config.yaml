@@ -3,3 +3,18 @@ no-git-ops: false
 export.git-add: false
 
 sync.remote: "git+https://github.com/vessux/umbel.git"
+
+# Dolt database name — the tracked, host-independent record of which database on
+# the shared dolt sql-server belongs to this repo. metadata.json also carries it,
+# but that file is host-local (gitignored, see .beads/.gitignore), so this is the
+# copy that survives a fresh clone and tells provisioning/bootstrap the right name
+# instead of leaving it to bd's directory-basename auto-detection.
+#
+# Note: bd only reads this file once metadata.json has established the workspace —
+# config.yaml alone does NOT make a checkout usable. Run `bd bootstrap` on a fresh
+# clone; teleport's beads_fetch already does this for a new host.
+#
+# Host-specific connection settings (dolt.shared-server / host / port) are
+# deliberately NOT set here: they would follow the repo to the Mac, which stays
+# embedded. The bd shim derives them per-project from metadata.json instead.
+dolt.database: "umbel"
