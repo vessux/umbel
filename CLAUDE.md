@@ -22,15 +22,29 @@ TypeScript / Node CLI (ESM, `>=18.17`). Unix only.
 - Prefer editing existing files over adding new ones.
 - Errors flow through `CliError` / `UsageError` / `NotFoundError`; exit codes in `src/run.ts` and the README "Exit codes" table.
 
+## Agent workflow
+
+Use **Clerk** (`clerk`) as the workflow facade for this repo.
+
+- Capture raw work with `clerk capture`.
+- Inspect/refine work with `clerk inbox ...`.
+- Pick up and deliver ready work with `clerk backlog ...`.
+- Run `clerk doctor` when setup or the next workflow step is unclear.
+
+Runtime instructions should speak Clerk verbs only. Operator-only docs under `docs/agents/`
+may describe lower-level storage details for maintenance.
+
 ## Agent skills
 
 ### Issue tracker
 
-Issues are tracked in GitHub Issues (`vessux/umbel`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Work is tracked through Clerk, backed by this repo's `.clerk` configuration. Use `clerk capture`,
+`clerk inbox ...`, and `clerk backlog ...`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Canonical labels — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+The canonical triage roles map to Clerk inbox/backlog dispositions, not tracker labels. See
+`docs/agents/triage-labels.md`.
 
 ### Domain docs
 
