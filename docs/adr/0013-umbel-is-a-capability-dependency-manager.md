@@ -14,8 +14,10 @@ sharing around that answer. It amends [ADR-0002](0002-bundle-artifact-model.md)
 installer.
 
 > Refined by [ADR-0014](0014-artifact-trust-gate.md) (the trust gate for fetched executable
-> artifacts) and [ADR-0015](0015-bundle-authoring-model.md) (the authoring UX). Those two
-> facets were split out to keep this the north-star record.
+> artifacts), [ADR-0015](0015-bundle-authoring-model.md) (the authoring UX), and
+> [ADR-0016](0016-extends-resolve-then-merge.md) (the `extends` resolve-then-merge mechanics —
+> what "canonical artifact identity" means, multi-lock, collision escalation). These facets were
+> split out to keep this the north-star record.
 
 ## Grounding
 
