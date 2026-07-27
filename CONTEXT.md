@@ -41,6 +41,20 @@ The on-disk set of fetched dependency checkouts (`$XDG_DATA_HOME/umbel/store`), 
 Producing a self-contained directory from a bundle (artifacts copied in) that runs as a plugin without umbel *and* re-imports into umbel — the outbound plugin boundary I/O.
 _Avoid_: vendor, export, build.
 
+### Composition
+
+**Extends**:
+A bundle inheriting another's **composition** — the child specializes the parent. Each bundle resolves its own artifacts (through its own **lock**) first; the resolved sets then merge, child overriding on **artifact identity** (ADR-0013; ADR-0016).
+_Avoid_: inherits, includes, imports.
+
+**Artifact identity**:
+What makes two resolved artifacts *the same* for `extends` override: a shared **kind** and **provenance** — the upstream **coordinate** (sans commit) plus subpath/leaf — independent of **alias** or pinned commit. A child re-declaring the same artifact overrides the parent (the child's commit wins); artifacts that merely share a **canonical name** are distinct and coexist.
+_Avoid_: canonical identity (ambiguous — see Flagged ambiguities).
+
+**Canonical name**:
+An artifact's harness-visible name — its frontmatter `name`, else its leaf dir. Two *distinct* artifacts sharing a canonical name **collide**; umbel keeps both, disambiguating each as `<alias>-<name>`. A display-level concern resolved at compile — never an override key.
+_Avoid_: canonical identity.
+
 ### Harnesses
 
 **Harness**:
@@ -92,4 +106,5 @@ The launch-time picker over every discovered bundle, shown when no pin records a
 - "pin" was used to mean both *the resolved bundle* and *a shortlist to choose from* — resolved: a pin is an ordered list of **candidates**; resolution to a single bundle happens directly (one candidate) or via the **scoped picker** (multiple).
 - "pin" vs "lock" — resolved: a **Pin** (`.umbel-bundle`) records *which bundle applies to a project*; a **Lock** (`<name>.lock`) records *which upstream versions a bundle resolves to*. Different concepts, different files.
 - "source" — the ADR-0002 sense (an arbitrary operator-chosen `<source>/<leaf>` attribution label) is **retired** by ADR-0013: a bundle now declares **dependencies** (an alias bound to a coordinate) via `deps:`. The naming freedom moves to the alias; the coordinate + lock add provenance and reproducibility.
+- "canonical" / "canonical artifact identity" — ADR-0013 said `extends` merges "child winning on canonical artifact identity", but **canonical name** (`collision.ts`) already meant the display name, which *coexists* (prefixed) rather than overrides. Resolved by ADR-0016: `extends` override keys on **artifact identity** (kind + provenance); **canonical name** stays a display-level collision concern. Artifacts that differ in provenance but share a name never silently drop across `extends` — they coexist and are prefixed, uniformly with same-bundle collisions.
 - "version" was read as an authored semantic release — resolved: a bundle's identity is a content **hash**, surfaced bare (`hash: <12-hex>`) in the harness-agnostic `bundle.md`. "Version" is only the Claude-Code-plugin-format string `0.0.0+<hash>` derived from that hash — it lives in `plugin.json` and is exported as `UMBEL_BUNDLE_VERSION`. Same identity, two representations; the `0.0.0+` shape is a CC plugin-schema artifact, not umbel data, so it stays out of `bundle.md`.

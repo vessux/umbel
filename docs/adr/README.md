@@ -34,3 +34,4 @@ from the diff.
 | [0013](0013-umbel-is-a-capability-dependency-manager.md) | umbel is a dependency-manager for capabilities; the plugin is boundary I/O |
 | [0014](0014-artifact-trust-gate.md) | Trust: gate auto-run artifacts by content hash; skills execute at the harness's discretion |
 | [0015](0015-bundle-authoring-model.md) | Bundle authoring: manifest is the source of truth; interleaved wizard, comment-preserving verbs |
+| [0016](0016-extends-resolve-then-merge.md) | `extends` resolves per-bundle, then merges by artifact identity (provenance, not display name) |
