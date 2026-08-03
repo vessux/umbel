@@ -59,7 +59,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.1.2",
     "knip": "^5.88.1",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
